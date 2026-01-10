@@ -1,5 +1,6 @@
-import { getActiveProducts, getCategories, getProductRating, getVisitorCount } from "@/lib/db/queries";
+import { getActiveProducts, getCategories, getProductRating, getVisitorCount, getUserPendingOrders } from "@/lib/db/queries";
 import { getActiveAnnouncement } from "@/actions/settings";
+import { auth } from "@/lib/auth";
 import { HomeContent } from "@/components/home-content";
 
 export const dynamic = 'force-dynamic';
@@ -162,10 +163,22 @@ export default async function Home() {
     categories = []
   }
 
+  // Check for pending orders
+  const session = await auth();
+  let pendingOrders: any[] = [];
+  if (session?.user?.id) {
+    try {
+      pendingOrders = await getUserPendingOrders(session.user.id);
+    } catch {
+      // Ignore errors fetching pending orders
+    }
+  }
+
   return <HomeContent
     products={productsWithRatings}
     announcement={announcement}
     visitorCount={visitorCount}
     categories={categories}
+    pendingOrders={pendingOrders}
   />;
 }

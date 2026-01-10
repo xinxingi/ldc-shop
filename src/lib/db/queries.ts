@@ -648,3 +648,18 @@ export async function toggleUserBlock(userId: string, isBlocked: boolean) {
         .set({ isBlocked })
         .where(eq(loginUsers.userId, userId));
 }
+
+export async function getUserPendingOrders(userId: string) {
+    return await db.select({
+        orderId: orders.orderId,
+        createdAt: orders.createdAt,
+        productName: orders.productName,
+        amount: orders.amount
+    })
+        .from(orders)
+        .where(and(
+            eq(orders.userId, userId),
+            eq(orders.status, 'pending')
+        ))
+        .orderBy(desc(orders.createdAt));
+}

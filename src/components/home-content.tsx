@@ -31,9 +31,10 @@ interface HomeContentProps {
     announcement?: string | null
     visitorCount?: number
     categories?: Array<{ name: string; icon: string | null; sortOrder: number }>
+    pendingOrders?: Array<{ orderId: string; createdAt: Date; productName: string; amount: string }>
 }
 
-export function HomeContent({ products, announcement, visitorCount, categories: categoryConfig }: HomeContentProps) {
+export function HomeContent({ products, announcement, visitorCount, categories: categoryConfig, pendingOrders }: HomeContentProps) {
     const { t } = useI18n()
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
@@ -101,6 +102,33 @@ export function HomeContent({ products, announcement, visitorCount, categories: 
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                             </svg>
                             <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">{announcement}</p>
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            {/* Pending Orders Notification */}
+            {pendingOrders && pendingOrders.length > 0 && (
+                <section className="mb-8">
+                    <div className="relative overflow-hidden rounded-xl border border-yellow-500/20 bg-gradient-to-r from-yellow-500/5 via-yellow-500/10 to-yellow-500/5 p-4">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-yellow-500 to-yellow-500/50" />
+                        <div className="flex items-center justify-between gap-4 pl-3">
+                            <div className="flex items-center gap-3">
+                                <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <p className="text-sm font-medium text-foreground/90">
+                                    {pendingOrders.length === 1
+                                        ? t('home.pendingOrder.single', { orderId: pendingOrders[0].orderId })
+                                        : t('home.pendingOrder.multiple', { count: pendingOrders.length })
+                                    }
+                                </p>
+                            </div>
+                            <Link href={pendingOrders.length === 1 ? `/order/${pendingOrders[0].orderId}` : '/orders'}>
+                                <Button size="sm" variant="outline" className="border-yellow-500/30 hover:bg-yellow-500/10 hover:text-yellow-600 dark:hover:text-yellow-400">
+                                    {pendingOrders.length === 1 ? t('common.payNow') : t('common.viewOrders')}
+                                </Button>
+                            </Link>
                         </div>
                     </div>
                 </section>
