@@ -98,12 +98,18 @@ export function HomeContent({ products, announcement, visitorCount, categories: 
     }, [products, selectedCategory, searchTerm, sortKey])
 
     return (
-        <main className="container py-8 md:py-16">
+        <main className="container py-8 md:py-16 relative overflow-hidden">
+            {/* Atmosphere background */}
+            <div className="pointer-events-none absolute inset-0 -z-10">
+                <div className="absolute -top-32 left-1/2 h-72 w-[85vw] -translate-x-1/2 rounded-full bg-gradient-to-r from-amber-200/30 via-sky-200/20 to-emerald-200/30 blur-3xl" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(0,0,0,0.04),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)]" />
+                <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(#000000_1px,transparent_1px)] [background-size:18px_18px] dark:[background-image:radial-gradient(#ffffff_1px,transparent_1px)]" />
+            </div>
 
             {/* Announcement Banner */}
             {announcement && (
                 <section className="mb-8">
-                    <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 p-4">
+                    <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 p-4 animate-in fade-in slide-in-from-top-2 duration-300">
                         <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-primary to-primary/50" />
                         <div className="flex items-start gap-3 pl-3">
                             <svg className="w-5 h-5 text-primary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -146,7 +152,7 @@ export function HomeContent({ products, announcement, visitorCount, categories: 
             <div className="flex flex-col gap-6 mb-8">
                 <div className="flex items-center justify-between">
                     {typeof visitorCount === 'number' && (
-                        <Badge variant="secondary" className="px-3 py-1">
+                        <Badge variant="secondary" className="px-3 py-1 bg-background/70 shadow-sm border border-border/40">
                             {t('home.visitorCount', { count: visitorCount })}
                         </Badge>
                     )}
@@ -181,7 +187,9 @@ export function HomeContent({ products, announcement, visitorCount, categories: 
                                 size="sm"
                                 className={cn(
                                     "rounded-full whitespace-nowrap transition-all duration-300",
-                                    selectedCategory === null ? "bg-primary shadow-md shadow-primary/20" : "bg-transparent border-dashed border-border hover:bg-muted"
+                                    selectedCategory === null
+                                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/30"
+                                        : "bg-background/70 border-dashed border-border hover:bg-muted"
                                 )}
                                 onClick={() => setSelectedCategory(null)}
                             >
@@ -194,7 +202,9 @@ export function HomeContent({ products, announcement, visitorCount, categories: 
                                     size="sm"
                                     className={cn(
                                         "rounded-full capitalize whitespace-nowrap transition-all duration-300",
-                                        selectedCategory === category ? "bg-primary shadow-md shadow-primary/20" : "bg-transparent hover:bg-muted"
+                                        selectedCategory === category
+                                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/30"
+                                            : "bg-background/70 hover:bg-muted"
                                     )}
                                     onClick={() => setSelectedCategory(category)}
                                 >
@@ -238,7 +248,8 @@ export function HomeContent({ products, announcement, visitorCount, categories: 
             {/* Main Product Grid (Full Width) */}
             <section>
                 {filteredProducts.length === 0 ? (
-                    <div className="text-center py-20 bg-muted/30 rounded-2xl border border-dashed border-muted-foreground/20">
+                    <div className="text-center py-20 bg-muted/30 rounded-2xl border border-dashed border-muted-foreground/20 relative overflow-hidden">
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0.04),_transparent_60%)] dark:bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.06),_transparent_60%)]" />
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted/50 mb-4">
                             <svg className="w-8 h-8 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -257,8 +268,8 @@ export function HomeContent({ products, announcement, visitorCount, categories: 
                         {filteredProducts.map((product, index) => (
                             <Card
                                 key={product.id}
-                                className="group overflow-hidden flex flex-col tech-card animate-fade-in border-border/40 hover:border-primary/50 transition-colors"
-                                style={{ animationDelay: `${index * 50}ms` }}
+                                className="group overflow-hidden flex flex-col tech-card border-border/40 bg-card/80 backdrop-blur-sm shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:border-primary/50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none"
+                                style={{ animationDelay: `${index * 60}ms` }}
                             >
                                 {/* Image Section with aspect ratio tweak */}
                                 <Link href={`/buy/${product.id}`} className="block aspect-[16/10] bg-gradient-to-br from-muted/30 to-muted/10 relative overflow-hidden group-hover:opacity-90">
@@ -288,7 +299,7 @@ export function HomeContent({ products, announcement, visitorCount, categories: 
 
                                     {product.isHot && (
                                         <div className="mb-2">
-                                            <Badge variant="default" className="text-[10px] h-4 px-1 bg-primary/10 text-primary hover:bg-primary/20 border-0">
+                                            <Badge variant="default" className="text-[10px] h-4 px-1.5 bg-orange-500 text-white border-0 shadow-sm">
                                                 🔥 {t('buy.hot')}
                                             </Badge>
                                         </div>
@@ -315,15 +326,15 @@ export function HomeContent({ products, announcement, visitorCount, categories: 
                                 {/* Footer Section */}
                                 <CardFooter className="p-4 pt-0 flex items-center justify-between gap-3 mt-auto border-t border-border/30 bg-muted/5">
                                     <div className="flex flex-col">
-                                        <div className="flex items-baseline gap-1.5">
-                                            <span className="text-lg font-bold text-primary">{Number(product.price)}</span>
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="text-lg font-bold text-primary tabular-nums">{Number(product.price)}</span>
                                             <span className="text-xs text-muted-foreground font-medium uppercase">{t('common.credits')}</span>
+                                            {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.price) && (
+                                                <span className="text-xs text-muted-foreground/70 line-through tabular-nums">
+                                                    {Number(product.compareAtPrice)}
+                                                </span>
+                                            )}
                                         </div>
-                                        {product.compareAtPrice && Number(product.compareAtPrice) > Number(product.price) && (
-                                            <span className="text-xs text-muted-foreground/60 line-through -mt-1 block">
-                                                {Number(product.compareAtPrice)}
-                                            </span>
-                                        )}
                                         <div className="flex items-center gap-2 mt-1">
                                             <div className="flex items-center text-xs text-muted-foreground">
                                                 {/* Assuming Archive icon is imported, e.g., from 'lucide-react' */}
