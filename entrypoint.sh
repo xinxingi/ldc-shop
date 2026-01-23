@@ -1,7 +1,14 @@
 #!/bin/sh
 
-# Wait for DB to be ready (simplistic approach, or just let drizzle retry)
 echo "Starting LDC Shop..."
+
+# Wait for PostgreSQL to be ready
+echo "Waiting for PostgreSQL..."
+until pg_isready -h db -p 5432 -U postgres 2>/dev/null; do
+  echo "PostgreSQL is unavailable - sleeping"
+  sleep 2
+done
+echo "PostgreSQL is ready!"
 
 # Run database migrations
 echo "Running database migrations..."

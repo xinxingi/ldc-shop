@@ -97,6 +97,44 @@
 
 点击上方按钮一键部署到 Vercel，数据库 (Vercel Postgres) 将自动配置。
 
+### Docker 部署
+
+使用 Docker 可以在本地或任何服务器上快速部署 LDC Shop，内置 PostgreSQL 数据库支持。
+
+#### 快速开始
+
+1. 复制环境变量模板：
+   ```bash
+   cp .env.example .env
+   ```
+
+2. 编辑 `.env` 文件，填入你的配置
+
+3. 构建并启动：
+   ```bash
+   docker-compose up -d --build
+   ```
+
+4. 查看日志：
+   ```bash
+   docker-compose logs -f
+   ```
+
+5. 访问 http://localhost:3000
+
+#### 常用命令
+
+```bash
+# 停止服务
+docker-compose down
+
+# 重新构建
+docker-compose up -d --build
+
+# 查看数据库
+docker exec -it ldc-shop-db psql -U postgres -d ldc_shop
+```
+
 
 
 如果你使用 Vercel 一键部署，默认可能不会包含 GitHub Actions 配置文件。你需要手动创建它来实现每天自动同步上游最新代码（并触发 Vercel 重部署）。
