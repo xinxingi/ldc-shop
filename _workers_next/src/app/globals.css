@@ -415,6 +415,8 @@
 .floating-field {
   position: relative;
   min-width: 0;
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
 }
 
 .floating-label {
