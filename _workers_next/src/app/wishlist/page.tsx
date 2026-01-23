@@ -26,8 +26,7 @@ export default async function WishlistPage() {
 
     return (
         <main className="container py-8 md:py-12 space-y-6">
-            <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight">{t('wishlist.title')}</h1>
+            <div className="flex items-center justify-end">
                 <Link href="/">
                     <Button variant="outline" size="sm">{t('common.back')}</Button>
                 </Link>

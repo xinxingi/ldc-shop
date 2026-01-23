@@ -1,6 +1,7 @@
 import { searchActiveProducts, getCategories } from "@/lib/db/queries"
 import { SearchContent } from "@/components/search-content"
 import { unstable_noStore } from "next/cache"
+import { auth } from "@/lib/auth"
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   if (!value) return undefined
@@ -23,8 +24,12 @@ export default async function SearchPage(props: {
   const page = parseIntParam(firstParam(searchParams.page), 1)
   const pageSize = Math.min(parseIntParam(firstParam(searchParams.pageSize), 24), 60)
 
+  const session = await auth()
+  const isLoggedIn = !!session?.user
+  const trustLevel = Number.isFinite(Number(session?.user?.trustLevel)) ? Number(session?.user?.trustLevel) : 0
+
   const [result, categories] = await Promise.all([
-    searchActiveProducts({ q, category, sort, page, pageSize }),
+    searchActiveProducts({ q, category, sort, page, pageSize, isLoggedIn, trustLevel }),
     getCategories(),
   ])
 

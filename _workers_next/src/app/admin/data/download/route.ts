@@ -159,6 +159,7 @@ export async function GET(req: Request) {
         isActive: p.isActive ?? true,
         sortOrder: p.sortOrder ?? 0,
         purchaseLimit: p.purchaseLimit,
+        visibilityLevel: p.visibilityLevel ?? -1,
         stock: p.stock,
         sold: p.sold,
       }))
@@ -182,6 +183,7 @@ export async function GET(req: Request) {
           "isActive",
           "sortOrder",
           "purchaseLimit",
+          "visibilityLevel",
           "stock",
           "sold",
         ]

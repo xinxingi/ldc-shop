@@ -103,7 +103,8 @@ export default async function ProfilePage() {
                 name: session.user.name || session.user.username || "User",
                 username: session.user.username || null,
                 avatar: session.user.avatar_url || null,
-                email: profileEmail || session.user.email || null
+                email: profileEmail || session.user.email || null,
+                trustLevel: session.user.trustLevel ?? 0
             }}
             points={userPoints}
             checkinEnabled={checkinEnabled}

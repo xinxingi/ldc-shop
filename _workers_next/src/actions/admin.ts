@@ -48,6 +48,12 @@ export async function saveProduct(formData: FormData) {
     const isHot = formData.get('isHot') === 'on'
     const isShared = formData.get('isShared') === 'on'
     const purchaseWarning = (formData.get('purchaseWarning') as string | null)?.trim() || null
+    const visibilityLevelRaw = (formData.get('visibilityLevel') as string | null)?.trim() ?? ''
+    const parsedVisibility = Number.parseInt(visibilityLevelRaw, 10)
+    const visibilityLevel = Number.isFinite(parsedVisibility) ? parsedVisibility : -1
+    if (![ -1, 0, 1, 2, 3 ].includes(visibilityLevel)) {
+        throw new Error("Invalid visibility level")
+    }
 
     const doSave = async () => {
         // Auto-create category if it doesn't exist
@@ -71,7 +77,8 @@ export async function saveProduct(formData: FormData) {
             purchaseLimit,
             purchaseWarning,
             isHot,
-            isShared
+            isShared,
+            visibilityLevel
         }).onConflictDoUpdate({
             target: products.id,
             set: {
@@ -84,7 +91,8 @@ export async function saveProduct(formData: FormData) {
                 purchaseLimit,
                 purchaseWarning,
                 isHot,
-                isShared
+                isShared,
+                visibilityLevel
             }
         })
     }
@@ -102,6 +110,9 @@ export async function saveProduct(formData: FormData) {
         } catch { /* column exists */ }
         try {
             await db.run(sql.raw(`ALTER TABLE products ADD COLUMN is_shared INTEGER DEFAULT 0`));
+        } catch { /* column exists */ }
+        try {
+            await db.run(sql.raw(`ALTER TABLE products ADD COLUMN visibility_level INTEGER DEFAULT -1`));
         } catch { /* column exists */ }
     }
 
@@ -124,6 +135,7 @@ export async function saveProduct(formData: FormData) {
     }
 
     revalidatePath('/admin/products')
+    revalidatePath(`/admin/product/edit/${id}`)
     revalidatePath('/admin/settings')
     revalidatePath('/')
     updateTag('home:products')

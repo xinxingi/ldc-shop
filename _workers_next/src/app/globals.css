@@ -415,6 +415,8 @@
 .floating-field {
   position: relative;
   min-width: 0;
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
 }
 
 .floating-label {
@@ -447,7 +449,7 @@
 
 .floating-field .peer:focus-visible ~ .floating-label,
 .floating-field .peer:not(:placeholder-shown) ~ .floating-label {
-  top: -0.75rem;
+  top: -0.95rem;
   color: hsl(var(--ring));
   transform: translateY(0) scale(0.95);
 }

@@ -15,6 +15,7 @@ export const products = sqliteTable('products', {
     sortOrder: integer('sort_order').default(0),
     purchaseLimit: integer('purchase_limit'),
     purchaseWarning: text('purchase_warning'), // Optional warning message shown before purchase
+    visibilityLevel: integer('visibility_level').default(-1),
     stockCount: integer('stock_count').default(0),
     lockedCount: integer('locked_count').default(0),
     soldCount: integer('sold_count').default(0),

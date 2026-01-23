@@ -34,18 +34,18 @@ const getCachedCategories = async () => {
   return getCategories()
 }
 
-const getCachedProductCategories = async () => {
+const getCachedProductCategories = async (isLoggedIn: boolean, trustLevel: number | null) => {
   'use cache'
   cacheTag(TAG_PRODUCT_CATEGORIES, TAG_PRODUCTS)
   cacheLife('days')
-  return getActiveProductCategories()
+  return getActiveProductCategories({ isLoggedIn, trustLevel })
 }
 
-const getCachedProducts = async () => {
+const getCachedProducts = async (isLoggedIn: boolean, trustLevel: number | null) => {
   'use cache'
   cacheTag(TAG_PRODUCTS)
   cacheLife('days')
-  return getActiveProducts()
+  return getActiveProducts({ isLoggedIn, trustLevel })
 }
 
 function stripMarkdown(input: string): string {
@@ -70,14 +70,16 @@ export default async function Home({
   const page = Math.max(1, Number.parseInt(typeof resolved.page === 'string' ? resolved.page : '1', 10) || 1);
 
   const session = await auth()
+  const isLoggedIn = !!session?.user
+  const trustLevel = Number.isFinite(Number(session?.user?.trustLevel)) ? Number(session?.user?.trustLevel) : 0
 
   // Run all independent queries in parallel for better performance
   const [products, announcement, visitorCount, categoryConfig, productCategories, wishlistEnabled] = await Promise.all([
-    getCachedProducts().catch(() => []),
+    getCachedProducts(isLoggedIn, trustLevel).catch(() => []),
     getCachedAnnouncement().catch(() => null),
     getCachedVisitorCount().catch(() => 0),
     getCachedCategories().catch(() => []),
-    getCachedProductCategories().catch(() => []),
+    getCachedProductCategories(isLoggedIn, trustLevel).catch(() => []),
     (async () => {
       try {
         return (await getSetting('wishlist_enabled')) === 'true'

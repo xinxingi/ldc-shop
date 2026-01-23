@@ -26,6 +26,7 @@ interface ProfileContentProps {
         username: string | null
         avatar: string | null
         email: string | null
+        trustLevel?: number
     }
     points: number
     checkinEnabled: boolean
@@ -195,7 +196,10 @@ export function ProfileContent({ user, points, checkinEnabled, orderStats, notif
                             {user.username && (
                                 <p className="text-sm text-muted-foreground">@{user.username}</p>
                             )}
-                            <p className="text-xs text-muted-foreground mt-1">ID: {user.id}</p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span>ID: {user.id}</span>
+                                <Badge variant="outline" className="text-xs">{t('profile.trustLevel')}: {Number.isFinite(Number(user.trustLevel)) ? user.trustLevel : 0}</Badge>
+                            </div>
                         </div>
                     </div>
                 </CardContent>
@@ -469,26 +473,26 @@ export function ProfileContent({ user, points, checkinEnabled, orderStats, notif
                     <CardTitle className="text-base">{t('profile.messages.title')}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                    <div className="floating-field">
+                    <div className="grid gap-2">
+                        <Label htmlFor="msg-title">{t('profile.messages.titleLabel')}</Label>
                         <Input
                             id="msg-title"
                             value={msgTitle}
                             onChange={(e) => setMsgTitle(e.target.value)}
-                            placeholder=" "
+                            placeholder={t('profile.messages.titlePlaceholder')}
                             disabled={msgSending}
                         />
-                        <Label htmlFor="msg-title" className="floating-label">{t('profile.messages.titleLabel')}</Label>
                     </div>
-                    <div className="floating-field">
+                    <div className="grid gap-2">
+                        <Label htmlFor="msg-body">{t('profile.messages.bodyLabel')}</Label>
                         <Textarea
                             id="msg-body"
                             className="min-h-[120px]"
-                            placeholder=" "
+                            placeholder={t('profile.messages.bodyPlaceholder')}
                             value={msgBody}
                             onChange={(e) => setMsgBody(e.target.value)}
                             disabled={msgSending}
                         />
-                        <Label htmlFor="msg-body" className="floating-label">{t('profile.messages.bodyLabel')}</Label>
                     </div>
                     <div className="flex justify-end">
                         <Button

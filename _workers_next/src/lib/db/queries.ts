@@ -1,7 +1,7 @@
 import { db } from "./index";
 import { products, cards, orders, settings, reviews, loginUsers, categories, userNotifications, wishlistItems, wishlistVotes } from "./schema";
 import { INFINITE_STOCK, RESERVATION_TTL_MS } from "@/lib/constants";
-import { eq, sql, desc, and, asc, gte, or, inArray } from "drizzle-orm";
+import { eq, sql, desc, and, asc, gte, or, inArray, lte } from "drizzle-orm";
 import { revalidateTag } from "next/cache";
 import { cache } from "react";
 
@@ -9,7 +9,7 @@ import { cache } from "react";
 let dbInitialized = false;
 let loginUsersSchemaReady = false;
 let wishlistTablesReady = false;
-const CURRENT_SCHEMA_VERSION = 12;
+const CURRENT_SCHEMA_VERSION = 13;
 
 async function ensureCardKeyDuplicatesAllowed() {
     try {
@@ -150,6 +150,7 @@ async function ensureDatabaseInitialized() {
             sort_order INTEGER DEFAULT 0,
             purchase_limit INTEGER,
             purchase_warning TEXT,
+            visibility_level INTEGER DEFAULT -1,
             stock_count INTEGER DEFAULT 0,
             locked_count INTEGER DEFAULT 0,
             sold_count INTEGER DEFAULT 0,
@@ -347,6 +348,7 @@ async function ensureProductsColumns() {
     await safeAddColumn('products', 'is_hot', 'INTEGER DEFAULT 0');
     await safeAddColumn('products', 'purchase_warning', 'TEXT');
     await safeAddColumn('products', 'is_shared', 'INTEGER DEFAULT 0');
+    await safeAddColumn('products', 'visibility_level', 'INTEGER DEFAULT -1');
     await safeAddColumn('products', 'stock_count', 'INTEGER DEFAULT 0');
     await safeAddColumn('products', 'locked_count', 'INTEGER DEFAULT 0');
     await safeAddColumn('products', 'sold_count', 'INTEGER DEFAULT 0');
@@ -704,6 +706,7 @@ export async function getProducts() {
             isHot: products.isHot,
             isActive: products.isActive,
             isShared: products.isShared,
+            visibilityLevel: products.visibilityLevel,
             sortOrder: products.sortOrder,
             purchaseLimit: products.purchaseLimit,
             stock: sql<number>`COALESCE(${products.stockCount}, 0)`,
@@ -715,8 +718,19 @@ export async function getProducts() {
     })
 }
 
+function resolveVisibilityThreshold(isLoggedIn?: boolean, trustLevel?: number | null) {
+    if (!isLoggedIn) return -1;
+    const level = Number.isFinite(Number(trustLevel)) ? Number(trustLevel) : 0;
+    return Math.max(0, level);
+}
+
+function visibilityCondition(isLoggedIn?: boolean, trustLevel?: number | null) {
+    const threshold = resolveVisibilityThreshold(isLoggedIn, trustLevel);
+    return lte(sql<number>`COALESCE(${products.visibilityLevel}, -1)`, threshold);
+}
+
 // Get only active products (for home page)
-export async function getActiveProducts() {
+export async function getActiveProducts(options?: { isLoggedIn?: boolean; trustLevel?: number | null }) {
     // Auto-initialize database on first access
     await ensureDatabaseInitialized();
 
@@ -732,6 +746,7 @@ export async function getActiveProducts() {
             isHot: products.isHot,
             isShared: products.isShared,
             purchaseLimit: products.purchaseLimit,
+            visibilityLevel: products.visibilityLevel,
             stock: sql<number>`COALESCE(${products.stockCount}, 0)`,
             locked: sql<number>`COALESCE(${products.lockedCount}, 0)`,
             sold: sql<number>`COALESCE(${products.soldCount}, 0)`,
@@ -739,7 +754,7 @@ export async function getActiveProducts() {
             reviewCount: sql<number>`COALESCE(${products.reviewCount}, 0)`
         })
             .from(products)
-            .where(eq(products.isActive, true))
+            .where(and(eq(products.isActive, true), visibilityCondition(options?.isLoggedIn, options?.trustLevel)))
             .orderBy(asc(products.sortOrder), desc(products.createdAt));
     })
 }
@@ -814,7 +829,7 @@ export async function getWishlistItems(userId: string | null, limit = 10) {
     }
 }
 
-export async function getProduct(id: string) {
+export async function getProduct(id: string, options?: { isLoggedIn?: boolean; trustLevel?: number | null }) {
     return await withProductColumnFallback(async () => {
         const result = await db.select({
             id: products.id,
@@ -829,13 +844,14 @@ export async function getProduct(id: string) {
             isShared: products.isShared,
             purchaseLimit: products.purchaseLimit,
             purchaseWarning: products.purchaseWarning,
+            visibilityLevel: products.visibilityLevel,
             stock: sql<number>`COALESCE(${products.stockCount}, 0)`,
             locked: sql<number>`COALESCE(${products.lockedCount}, 0)`,
             rating: sql<number>`COALESCE(${products.rating}, 0)`,
             reviewCount: sql<number>`COALESCE(${products.reviewCount}, 0)`
         })
             .from(products)
-            .where(eq(products.id, id))
+            .where(and(eq(products.id, id), visibilityCondition(options?.isLoggedIn, options?.trustLevel)))
             ;
 
         // Return null if product doesn't exist or is inactive
@@ -845,6 +861,20 @@ export async function getProduct(id: string) {
         }
         return product;
     })
+}
+
+export async function getProductVisibility(id: string) {
+    return await withProductColumnFallback(async () => {
+        const result = await db.select({
+            id: products.id,
+            isActive: products.isActive,
+            visibilityLevel: products.visibilityLevel,
+        })
+            .from(products)
+            .where(eq(products.id, id));
+
+        return result[0] || null;
+    });
 }
 
 // Get product for admin (includes inactive products)
@@ -863,6 +893,7 @@ export async function getProductForAdmin(id: string) {
             isShared: products.isShared,
             purchaseLimit: products.purchaseLimit,
             purchaseWarning: products.purchaseWarning,
+            visibilityLevel: products.visibilityLevel,
         })
             .from(products)
             .where(eq(products.id, id));
@@ -1121,6 +1152,8 @@ export async function searchActiveProducts(params: {
     sort?: string
     page?: number
     pageSize?: number
+    isLoggedIn?: boolean
+    trustLevel?: number | null
 }) {
     const q = (params.q || '').trim()
     const category = (params.category || '').trim()
@@ -1129,7 +1162,7 @@ export async function searchActiveProducts(params: {
     const pageSize = Math.min(params.pageSize && params.pageSize > 0 ? params.pageSize : 24, 60)
     const offset = (page - 1) * pageSize
 
-    const whereParts: any[] = [eq(products.isActive, true)]
+    const whereParts: any[] = [eq(products.isActive, true), visibilityCondition(params.isLoggedIn, params.trustLevel)]
     if (category && category !== 'all') whereParts.push(eq(products.category, category))
     if (q) {
         const like = `%${q}%`
@@ -1198,13 +1231,18 @@ export async function searchActiveProducts(params: {
     }
 }
 
-export async function getActiveProductCategories(): Promise<string[]> {
+export async function getActiveProductCategories(options?: { isLoggedIn?: boolean; trustLevel?: number | null }): Promise<string[]> {
     await ensureDatabaseInitialized();
     try {
         const rows = await db
             .select({ category: products.category })
             .from(products)
-            .where(and(eq(products.isActive, true), sql`${products.category} IS NOT NULL`, sql`TRIM(${products.category}) <> ''`))
+            .where(and(
+                eq(products.isActive, true),
+                visibilityCondition(options?.isLoggedIn, options?.trustLevel),
+                sql`${products.category} IS NOT NULL`,
+                sql`TRIM(${products.category}) <> ''`
+            ))
             .groupBy(products.category)
             .orderBy(asc(products.category));
         return rows.map((r) => r.category as string).filter(Boolean);
