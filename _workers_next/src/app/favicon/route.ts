@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSetting } from "@/lib/db/queries";
 
-export const dynamic = "force-dynamic";
-
 let cached: {
   url: string;
   body: ArrayBuffer;

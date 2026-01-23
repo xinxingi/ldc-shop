@@ -7,6 +7,7 @@ import { MobileNavWrapper } from "@/components/mobile-nav-wrapper";
 import { Providers } from "@/components/providers";
 import { cn } from "@/lib/utils";
 import { getSetting } from "@/lib/db/queries";
+import { Suspense } from "react";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -84,7 +85,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return metadata;
 }
 
-export default async function RootLayout({
+async function RootLayoutContent({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -131,4 +132,30 @@ export default async function RootLayout({
       </body>
     </html>
   );
+}
+
+function RootLayoutFallback() {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={cn("min-h-screen bg-background font-sans antialiased", inter.className)}>
+        <div className="relative flex min-h-screen flex-col">
+          <div className="h-16 border-b border-border/40 bg-background/70" />
+          <div className="flex-1" />
+          <div className="h-16 border-t border-border/40 bg-background/70" />
+        </div>
+      </body>
+    </html>
+  )
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <Suspense fallback={<RootLayoutFallback />}>
+      <RootLayoutContent>{children}</RootLayoutContent>
+    </Suspense>
+  )
 }

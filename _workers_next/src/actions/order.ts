@@ -9,7 +9,7 @@ import { orders, cards } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { withOrderColumnFallback, recalcProductAggregates } from "@/lib/db/queries"
 import { cookies } from "next/headers"
-import { revalidateTag } from "next/cache"
+import { updateTag } from "next/cache"
 
 export async function checkOrderStatus(orderId: string) {
     const session = await auth()
@@ -104,7 +104,7 @@ export async function cancelPendingOrder(orderId: string) {
             }
         }
         try {
-            revalidateTag('home:products')
+            updateTag('home:products')
         } catch {
             // best effort
         }

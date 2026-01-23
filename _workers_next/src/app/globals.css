@@ -302,6 +302,40 @@
 }
 
 /* ======================================
+   PERFORMANCE FALLBACKS
+   ====================================== */
+@media (max-width: 640px) {
+  .glass {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+
+  .tech-card {
+    backdrop-filter: none;
+  }
+
+  .tech-card:hover {
+    box-shadow: 0 10px 20px -12px oklch(0.5 0.2 270 / 0.12);
+  }
+
+  .glow-border,
+  .glow-border-hover:hover {
+    box-shadow:
+      0 0 12px -6px var(--glow-primary),
+      inset 0 0 12px -8px var(--glow-primary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-glow,
+  .animate-fade-in,
+  .animate-shimmer,
+  .animate-input-shake {
+    animation: none;
+  }
+}
+
+/* ======================================
    ANIMATIONS
    ====================================== */
 @keyframes pulse-glow {
@@ -342,6 +376,21 @@
   }
 }
 
+@keyframes input-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-2px);
+  }
+  40%,
+  80% {
+    transform: translateX(2px);
+  }
+}
+
 .animate-pulse-glow {
   animation: pulse-glow 3s ease-in-out infinite;
 }
@@ -357,4 +406,48 @@
       transparent 100%);
   background-size: 200% 100%;
   animation: shimmer 2s infinite;
+}
+
+.animate-input-shake {
+  animation: input-shake 0.28s ease-in-out 1;
+}
+
+.floating-field {
+  position: relative;
+  min-width: 0;
+}
+
+.floating-label {
+  position: absolute;
+  left: 0.75rem;
+  top: 0.65rem;
+  padding: 0 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--background));
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px hsl(var(--background));
+  background-clip: padding-box;
+  z-index: 1;
+  transform-origin: left top;
+  transition: transform 0.2s ease, color 0.2s ease, top 0.2s ease;
+  pointer-events: none;
+  max-width: calc(100% - 1.5rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.floating-field .peer:placeholder-shown ~ .floating-label {
+  top: 0.75rem;
+  font-size: 0.875rem;
+  transform: translateY(0);
+}
+
+.floating-field .peer:focus-visible ~ .floating-label,
+.floating-field .peer:not(:placeholder-shown) ~ .floating-label {
+  top: -0.75rem;
+  color: hsl(var(--ring));
+  transform: translateY(0) scale(0.95);
 }

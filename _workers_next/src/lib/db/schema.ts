@@ -64,6 +64,7 @@ export const loginUsers = sqliteTable('login_users', {
     email: text('email'),
     points: integer('points').default(0).notNull(),
     isBlocked: integer('is_blocked', { mode: 'boolean' }).default(false),
+    desktopNotificationsEnabled: integer('desktop_notifications_enabled', { mode: 'boolean' }).default(false),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()),
     lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()),
     lastCheckinAt: integer('last_checkin_at', { mode: 'timestamp_ms' }),

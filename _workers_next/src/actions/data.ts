@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db"
 import { sql } from "drizzle-orm"
-import { revalidatePath, revalidateTag } from "next/cache"
+import { revalidatePath, updateTag } from "next/cache"
 import { checkAdmin } from "@/actions/admin"
 import { recalcProductAggregatesForMany } from "@/lib/db/queries"
 import { products } from "@/lib/db/schema"
@@ -185,12 +185,12 @@ export async function importData(formData: FormData) {
         }
 
         revalidatePath('/admin')
-        revalidateTag('home:products')
-        revalidateTag('home:ratings')
-        revalidateTag('home:categories')
-        revalidateTag('home:announcement')
-        revalidateTag('home:product-categories')
-        revalidateTag('home:visitors')
+        updateTag('home:products')
+        updateTag('home:ratings')
+        updateTag('home:categories')
+        updateTag('home:announcement')
+        updateTag('home:product-categories')
+        updateTag('home:visitors')
         return { success: true, count: successCount, errors: errorCount }
     } catch (e: any) {
         return { success: false, error: e.message }

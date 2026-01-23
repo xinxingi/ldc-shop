@@ -4,11 +4,10 @@ import { getServerI18n } from "@/lib/i18n/server"
 import { getSetting, getWishlistItems } from "@/lib/db/queries"
 import { WishlistSection } from "@/components/wishlist-section"
 import { Button } from "@/components/ui/button"
-
-export const dynamic = "force-dynamic"
-export const revalidate = 0
+import { unstable_noStore } from "next/cache"
 
 export default async function WishlistPage() {
+    unstable_noStore()
     const { t } = await getServerI18n()
     const session = await auth()
     let enabled = false

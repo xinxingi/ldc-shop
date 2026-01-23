@@ -1,48 +1,14 @@
 'use server'
 
 import { db } from "@/lib/db"
-import { cards, orders, refundRequests, loginUsers } from "@/lib/db/schema"
+import { cards, orders, refundRequests, loginUsers, products } from "@/lib/db/schema"
 import { and, eq, sql, inArray } from "drizzle-orm"
-import { revalidatePath, revalidateTag } from "next/cache"
+import { revalidatePath, updateTag } from "next/cache"
 import { getSetting, recalcProductAggregates } from "@/lib/db/queries"
-
-export async function getRefundParams(orderId: string) {
-    // Auth Check
-    const { auth } = await import("@/lib/auth")
-    const session = await auth()
-    const user = session?.user
-    const adminUsers = process.env.ADMIN_USERS?.toLowerCase().split(',') || []
-    if (!user || !user.username || !adminUsers.includes(user.username.toLowerCase())) {
-        throw new Error("Unauthorized")
-    }
-
-    // Get Order
-    const order = await db.query.orders.findFirst({
-        where: eq(orders.orderId, orderId)
-    })
-
-    if (!order) throw new Error("Order not found")
-    if (!order.tradeNo) throw new Error("Missing trade_no")
-
-    // Return params for client-side form submission
-    return {
-        pid: process.env.MERCHANT_ID!,
-        key: process.env.MERCHANT_KEY!,
-        trade_no: order.tradeNo,
-        out_trade_no: order.orderId,
-        money: Number(order.amount).toFixed(2)
-    }
-}
+import { checkAdmin } from "@/actions/admin"
 
 export async function markOrderRefunded(orderId: string) {
-    // Auth Check
-    const { auth } = await import("@/lib/auth")
-    const session = await auth()
-    const user = session?.user
-    const adminUsers = process.env.ADMIN_USERS?.toLowerCase().split(',') || []
-    if (!user || !user.username || !adminUsers.includes(user.username.toLowerCase())) {
-        throw new Error("Unauthorized")
-    }
+    await checkAdmin()
 
     // No transaction - D1 doesn't support SQL transactions in HTTP api easily
     const order = await db.query.orders.findFirst({ where: eq(orders.orderId, orderId) })
@@ -66,6 +32,18 @@ export async function markOrderRefunded(orderId: string) {
     } catch {
         reclaimCards = true
     }
+    if (reclaimCards) {
+        if (order.productId) {
+            const product = await db.query.products.findFirst({
+                where: eq(products.id, order.productId),
+                columns: { isShared: true }
+            });
+            if (product?.isShared) {
+                reclaimCards = false;
+            }
+        }
+    }
+
     if (reclaimCards) {
         const rawIds = order.cardIds || '';
         const parsedIds = rawIds
@@ -108,7 +86,7 @@ export async function markOrderRefunded(orderId: string) {
         }
     }
     try {
-        revalidateTag('home:products')
+        updateTag('home:products')
     } catch {
         // best effort
     }
@@ -117,14 +95,7 @@ export async function markOrderRefunded(orderId: string) {
 }
 
 export async function proxyRefund(orderId: string) {
-    // Auth Check
-    const { auth } = await import("@/lib/auth")
-    const session = await auth()
-    const user = session?.user
-    const adminUsers = process.env.ADMIN_USERS?.toLowerCase().split(',') || []
-    if (!user || !user.username || !adminUsers.includes(user.username.toLowerCase())) {
-        throw new Error("Unauthorized")
-    }
+    await checkAdmin()
 
     const pid = process.env.MERCHANT_ID
     const key = process.env.MERCHANT_KEY

@@ -91,28 +91,31 @@ export function AdminMessagesContent({ history, inbox }: { history: any[]; inbox
                             </div>
                         </div>
                         {targetType !== "all" && (
-                            <div className="space-y-2">
-                                <Label>{targetLabel}</Label>
+                            <div className="floating-field">
                                 <Input
                                     value={targetValue}
                                     onChange={(e) => setTargetValue(e.target.value)}
-                                    placeholder={targetPlaceholder}
+                                    placeholder=" "
                                 />
+                                <Label className="floating-label">{targetLabel}</Label>
+                                {targetPlaceholder && (
+                                    <p className="text-xs text-muted-foreground">{targetPlaceholder}</p>
+                                )}
                             </div>
                         )}
                     </div>
-                    <div className="space-y-2">
-                        <Label>{t('admin.messages.titleLabel')}</Label>
-                        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('admin.messages.titlePlaceholder')} />
+                    <div className="floating-field">
+                        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder=" " />
+                        <Label className="floating-label">{t('admin.messages.titleLabel')}</Label>
                     </div>
-                    <div className="space-y-2">
-                        <Label>{t('admin.messages.bodyLabel')}</Label>
+                    <div className="floating-field">
                         <Textarea
                             value={body}
                             onChange={(e) => setBody(e.target.value)}
-                            placeholder={t('admin.messages.bodyPlaceholder')}
+                            placeholder=" "
                             rows={5}
                         />
+                        <Label className="floating-label">{t('admin.messages.bodyLabel')}</Label>
                     </div>
                     <div className="flex justify-end">
                         <Button

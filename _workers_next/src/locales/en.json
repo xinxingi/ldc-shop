@@ -344,6 +344,8 @@
                 "fromEmail": "Sender Email",
                 "fromEmailHint": "Must be from a domain verified in Resend",
                 "fromName": "Sender Name",
+                "language": "Email language",
+                "languageHint": "Used for order delivery emails. Falls back to Telegram language if not set.",
                 "testLabel": "Test Email",
                 "testPlaceholder": "Enter test email address",
                 "testButton": "Send Test",
@@ -525,7 +527,7 @@
             "markRefunded": "Mark Refunded",
             "refundConfirm": "This will open the refund page in a new tab.\n\nSteps:\n1. Complete the refund in the new tab\n2. Verify success in Linux DO Credit dashboard\n3. Return here and click \"Mark Refunded\"\n\nContinue?",
             "refundProxyConfirm": "Confirm refund?",
-            "refundProxyNotProcessed": "Proxy request finished but not confirmed as success; use manual flow if needed.",
+            "refundProxyNotProcessed": "Proxy request finished but not confirmed; verify on the payment platform and then click \"Mark Refunded\".",
             "refundVerify": "Have you verified the refund was successful in the Linux DO Credit dashboard?",
             "refundSuccess": "Order marked as refunded",
             "refundInfo": "After verifying the refund was successful, click 'Mark Refunded'",
@@ -534,7 +536,7 @@
             "verifySuccessRefunded": "Refund verified successfully!",
             "verifyInfoPaid": "Verified: Order is Paid (Active).",
             "verifyStatus": "Status Verified",
-            "proxyFailedTryManual": "Server refund failed. Try client-side refund?",
+            "proxyFailedTryManual": "Server refund failed. Please verify on the payment platform and then click \"Mark Refunded\".",
             "tryManual": "Manual Refund"
         },
         "cards": {
@@ -600,6 +602,20 @@
         "clearInbox": "Clear inbox",
         "inboxCleared": "Inbox cleared",
         "unread": "Unread",
+        "desktopNotifications": {
+            "title": "Desktop Notifications",
+            "desc": "Show browser notifications for new messages and updates.",
+            "enabled": "Enabled",
+            "disabled": "Disabled",
+            "unsupported": "Your browser does not support desktop notifications.",
+            "permissionDenied": "Notification permission denied.",
+            "enabledToast": "Desktop notifications enabled",
+            "disabledToast": "Desktop notifications disabled",
+            "testTitle": "Notifications enabled",
+            "testBody": "You'll receive desktop alerts when new messages arrive.",
+            "newTitle": "New notification",
+            "newBody": "You have {{count}} unread notification(s)."
+        },
         "messages": {
             "title": "Contact Admin",
             "titleLabel": "Title",
@@ -620,7 +636,7 @@
             "refundRejectedBody": "Your refund request for order {{orderId}} was rejected.",
             "refundRejectedBodyWithNote": "Your refund request for order {{orderId}} was rejected. Note: {{adminNote}}",
             "adminMessageTitle": "Admin message",
-            "adminMessageBody": "{{body}}"
+            "adminMessageBody": "You received a message from the admin."
         }
     },
     "language": {

@@ -9,10 +9,11 @@ import { Badge } from "@/components/ui/badge"
 import { Coins, Package, Clock, CheckCircle, ChevronRight, User, LogOut, Bell } from "lucide-react"
 import { signOut } from "next-auth/react"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { updateProfileEmail } from "@/actions/profile"
-import { useEffect, useState } from "react"
+import { updateDesktopNotifications, updateProfileEmail } from "@/actions/profile"
+import { useEffect, useRef, useState } from "react"
 import { CheckInButton } from "@/components/checkin-button"
 import { clearMyNotifications, getMyNotifications, markAllNotificationsRead, markNotificationRead } from "@/actions/user-notifications"
 import { sendUserMessage } from "@/actions/user-messages"
@@ -42,9 +43,10 @@ interface ProfileContentProps {
         isRead: boolean | null
         createdAt: number | null
     }>
+    desktopNotificationsEnabled: boolean
 }
 
-export function ProfileContent({ user, points, checkinEnabled, orderStats, notifications: initialNotifications }: ProfileContentProps) {
+export function ProfileContent({ user, points, checkinEnabled, orderStats, notifications: initialNotifications, desktopNotificationsEnabled }: ProfileContentProps) {
     const { t } = useI18n()
     const [email, setEmail] = useState(user.email || '')
     const [savingEmail, setSavingEmail] = useState(false)
@@ -57,6 +59,9 @@ export function ProfileContent({ user, points, checkinEnabled, orderStats, notif
     const [msgTitle, setMsgTitle] = useState("")
     const [msgBody, setMsgBody] = useState("")
     const [msgSending, setMsgSending] = useState(false)
+    const [desktopEnabled, setDesktopEnabled] = useState(desktopNotificationsEnabled)
+    const [desktopSaving, setDesktopSaving] = useState(false)
+    const notifiedIdsRef = useRef<Set<number>>(new Set())
 
     const unreadCount = notifications.filter((n) => !n.isRead).length
 
@@ -107,6 +112,74 @@ export function ProfileContent({ user, points, checkinEnabled, orderStats, notif
         refresh()
     }, [])
 
+    useEffect(() => {
+        if (!desktopEnabled) return
+        if (typeof window === "undefined" || !("Notification" in window)) return
+        if (Notification.permission !== "granted") return
+
+        const unread = notifications.filter((n) => !n.isRead)
+        const fresh = unread.filter((n) => !notifiedIdsRef.current.has(n.id))
+        if (!fresh.length) return
+
+        fresh.slice(0, 3).forEach((n) => {
+            const data = parseNotificationData(n.data)
+            const params = data.params || {}
+            const title = t(n.titleKey, params)
+            const body = t(n.contentKey, params)
+            new Notification(title, { body })
+            notifiedIdsRef.current.add(n.id)
+        })
+    }, [desktopEnabled, notifications, t])
+
+    const ensureNotificationPermission = async () => {
+        if (typeof window === "undefined" || !("Notification" in window)) {
+            toast.error(t('profile.desktopNotifications.unsupported'))
+            return false
+        }
+        if (Notification.permission === "granted") return true
+        if (Notification.permission === "denied") {
+            toast.error(t('profile.desktopNotifications.permissionDenied'))
+            return false
+        }
+        const permission = await Notification.requestPermission()
+        if (permission !== "granted") {
+            toast.error(t('profile.desktopNotifications.permissionDenied'))
+            return false
+        }
+        return true
+    }
+
+    const handleToggleDesktopNotifications = async () => {
+        if (desktopSaving) return
+        const next = !desktopEnabled
+        if (next) {
+            const ok = await ensureNotificationPermission()
+            if (!ok) return
+        }
+        setDesktopSaving(true)
+        try {
+            const res = await updateDesktopNotifications(next)
+            if (res?.success) {
+                setDesktopEnabled(next)
+                toast.success(next ? t('profile.desktopNotifications.enabledToast') : t('profile.desktopNotifications.disabledToast'))
+                if (next) {
+                    notifiedIdsRef.current = new Set(notifications.map((n) => n.id))
+                }
+                if (next && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                    new Notification(t('profile.desktopNotifications.testTitle'), {
+                        body: t('profile.desktopNotifications.testBody')
+                    })
+                }
+            } else {
+                toast.error(res?.error ? t(res.error) : t('common.error'))
+            }
+        } catch {
+            toast.error(t('common.error'))
+        } finally {
+            setDesktopSaving(false)
+        }
+    }
+
     return (
         <main className="container py-8 max-w-2xl">
             {/* User Info */}
@@ -134,16 +207,16 @@ export function ProfileContent({ user, points, checkinEnabled, orderStats, notif
                     <CardTitle className="text-base">{t('profile.emailTitle')}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-2">
-                        <Label htmlFor="profile-email">{t('profile.emailLabel')}</Label>
+                    <div className="floating-field">
                         <Input
                             id="profile-email"
                             type="email"
-                            placeholder={t('profile.emailPlaceholder')}
+                            placeholder=" "
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             disabled={savingEmail}
                         />
+                        <Label htmlFor="profile-email" className="floating-label">{t('profile.emailLabel')}</Label>
                         <p className="text-xs text-muted-foreground">{t('profile.emailHint')}</p>
                         <Button
                             variant="outline"
@@ -166,6 +239,27 @@ export function ProfileContent({ user, points, checkinEnabled, orderStats, notif
                             }}
                         >
                             {t('profile.emailSave')}
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Desktop Notifications */}
+            <Card className="mb-6">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-base">{t('profile.desktopNotifications.title')}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-between gap-4">
+                        <p className="text-sm text-muted-foreground">{t('profile.desktopNotifications.desc')}</p>
+                        <Button
+                            type="button"
+                            variant={desktopEnabled ? "default" : "outline"}
+                            size="sm"
+                            onClick={handleToggleDesktopNotifications}
+                            disabled={desktopSaving}
+                        >
+                            {desktopEnabled ? t('profile.desktopNotifications.enabled') : t('profile.desktopNotifications.disabled')}
                         </Button>
                     </div>
                 </CardContent>
@@ -375,26 +469,26 @@ export function ProfileContent({ user, points, checkinEnabled, orderStats, notif
                     <CardTitle className="text-base">{t('profile.messages.title')}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                    <div className="space-y-2">
-                        <Label htmlFor="msg-title">{t('profile.messages.titleLabel')}</Label>
+                    <div className="floating-field">
                         <Input
                             id="msg-title"
                             value={msgTitle}
                             onChange={(e) => setMsgTitle(e.target.value)}
-                            placeholder={t('profile.messages.titlePlaceholder')}
+                            placeholder=" "
                             disabled={msgSending}
                         />
+                        <Label htmlFor="msg-title" className="floating-label">{t('profile.messages.titleLabel')}</Label>
                     </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="msg-body">{t('profile.messages.bodyLabel')}</Label>
-                        <textarea
+                    <div className="floating-field">
+                        <Textarea
                             id="msg-body"
-                            className="flex min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder={t('profile.messages.bodyPlaceholder')}
+                            className="min-h-[120px]"
+                            placeholder=" "
                             value={msgBody}
                             onChange={(e) => setMsgBody(e.target.value)}
                             disabled={msgSending}
                         />
+                        <Label htmlFor="msg-body" className="floating-label">{t('profile.messages.bodyLabel')}</Label>
                     </div>
                     <div className="flex justify-end">
                         <Button

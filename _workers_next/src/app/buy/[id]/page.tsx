@@ -3,32 +3,31 @@ import { auth } from "@/lib/auth"
 import { BuyContent } from "@/components/buy-content"
 import { getProduct, getProductReviews, getProductRating, canUserReview } from "@/lib/db/queries"
 import { getEmailSettings } from "@/lib/email"
-import { unstable_cache } from "next/cache"
-
-export const dynamic = 'force-dynamic'
+import { cacheLife, cacheTag } from "next/cache"
 
 interface BuyPageProps {
     params: Promise<{ id: string }>
 }
 
-const CACHE_TTL_SECONDS = 60 * 60 * 24
 const TAG_PRODUCTS = "home:products"
 const TAG_RATINGS = "home:ratings"
 
 export default async function BuyPage({ params }: BuyPageProps) {
     const { id } = await params
 
-    const getCachedProduct = () => unstable_cache(
-        async () => getProduct(id),
-        ["product-detail", id],
-        { revalidate: CACHE_TTL_SECONDS, tags: [TAG_PRODUCTS] }
-    )()
+    const getCachedProduct = async () => {
+        'use cache'
+        cacheTag(TAG_PRODUCTS)
+        cacheLife('days')
+        return getProduct(id)
+    }
 
-    const getCachedReviews = () => unstable_cache(
-        async () => getProductReviews(id),
-        ["product-reviews", id],
-        { revalidate: CACHE_TTL_SECONDS, tags: [TAG_RATINGS] }
-    )()
+    const getCachedReviews = async () => {
+        'use cache'
+        cacheTag(TAG_RATINGS)
+        cacheLife('days')
+        return getProductReviews(id)
+    }
 
     // Run all queries in parallel for better performance
     const [session, product, reviews, emailSettings] = await Promise.all([

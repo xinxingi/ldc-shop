@@ -7,7 +7,7 @@ import { LanguageSwitcher } from "@/components/language-switcher"
 import { ShoppingBag } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { usePathname, useRouter } from "next/navigation"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import { getMyUnreadCount } from "@/actions/user-notifications"
 
@@ -122,20 +122,31 @@ export function HeaderUserMenuItems({ isAdmin, showNav = true }: { isAdmin: bool
 
 export { LanguageSwitcher }
 
-export function HeaderUnreadBadge({ initialCount = 0, className }: { initialCount?: number; className?: string }) {
+export function HeaderUnreadBadge({ initialCount = 0, desktopEnabled = false, className }: { initialCount?: number; desktopEnabled?: boolean; className?: string }) {
+    const { t } = useI18n()
     const [count, setCount] = useState(initialCount)
     const pathname = usePathname()
+    const prevCountRef = useRef(initialCount)
 
     const refresh = useCallback(async () => {
         try {
             const res = await getMyUnreadCount()
             if (res?.success) {
-                setCount(res.count || 0)
+                const nextCount = res.count || 0
+                setCount(nextCount)
+                if (desktopEnabled && typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                    if (nextCount > prevCountRef.current) {
+                        new Notification(t('profile.desktopNotifications.newTitle'), {
+                            body: t('profile.desktopNotifications.newBody', { count: nextCount })
+                        })
+                    }
+                }
+                prevCountRef.current = nextCount
             }
         } catch {
             // ignore
         }
-    }, [])
+    }, [desktopEnabled, t])
 
     useEffect(() => {
         refresh()

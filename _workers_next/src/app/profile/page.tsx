@@ -3,12 +3,12 @@ import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { orders, loginUsers } from "@/lib/db/schema"
 import { eq, sql } from "drizzle-orm"
-import { getLoginUserEmail, getSetting, getUserNotifications } from "@/lib/db/queries"
+import { getLoginUserEmail, getLoginUserDesktopNotificationsEnabled, getSetting, getUserNotifications } from "@/lib/db/queries"
 import { ProfileContent } from "@/components/profile-content"
-
-export const dynamic = 'force-dynamic'
+import { unstable_noStore } from "next/cache"
 
 export default async function ProfilePage() {
+    unstable_noStore()
     const session = await auth()
     
     if (!session?.user?.id) {
@@ -21,6 +21,7 @@ export default async function ProfilePage() {
     let userPoints = 0
     let profileEmail: string | null = null
     let checkinEnabled = true
+    let desktopNotificationsEnabled = false
     try {
         const userResult = await db.select({ points: loginUsers.points })
             .from(loginUsers)
@@ -35,6 +36,11 @@ export default async function ProfilePage() {
         profileEmail = await getLoginUserEmail(userId)
     } catch {
         profileEmail = null
+    }
+    try {
+        desktopNotificationsEnabled = await getLoginUserDesktopNotificationsEnabled(userId)
+    } catch {
+        desktopNotificationsEnabled = false
     }
     try {
         const v = await getSetting('checkin_enabled')
@@ -103,6 +109,7 @@ export default async function ProfilePage() {
             checkinEnabled={checkinEnabled}
             orderStats={orderStats}
             notifications={notifications}
+            desktopNotificationsEnabled={desktopNotificationsEnabled}
         />
     )
 }

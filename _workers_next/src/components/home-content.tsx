@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { StarRatingStatic } from "@/components/star-rating-static"
 import { NavigationPill } from "@/components/navigation-pill"
 import { useI18n } from "@/lib/i18n/context"
+import { INFINITE_STOCK } from "@/lib/constants"
 
 interface Product {
     id: string
@@ -248,36 +250,34 @@ export function HomeContent({ products, announcement, visitorCount, categories =
                         {pageItems.map((product, index) => (
                             <Card
                                 key={product.id}
-                                className="group relative overflow-hidden flex flex-col tech-card border-border/40 bg-card/80 backdrop-blur-sm shadow-sm hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-0.5 hover:border-primary/50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none"
+                                className="group relative overflow-hidden flex flex-col rounded-2xl border border-border/30 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_18px_rgba(0,0,0,0.06)] transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none"
                                 style={{ animationDelay: `${index * 60}ms` }}
                             >
-                                <div className="pointer-events-none absolute inset-0 z-0 rounded-xl bg-gradient-to-br from-primary/12 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                                 <Link
                                     href={`/buy/${product.id}`}
                                     aria-label={t('common.viewDetails')}
                                     className="absolute inset-0 z-10"
                                 />
-                                {/* Image Section with aspect ratio tweak */}
-                                <div className="block aspect-[16/10] bg-gradient-to-br from-muted/30 to-muted/10 relative overflow-hidden group-hover:opacity-90">
-                                    <img
+                                {/* Image Section */}
+                                <div className="relative m-4 aspect-[16/10] overflow-hidden rounded-xl border border-border/20 bg-muted/10">
+                                    <Image
                                         src={product.image || `https://api.dicebear.com/7.x/shapes/svg?seed=${product.id}`}
                                         alt={product.name}
-                                        loading={index < 2 ? "eager" : "lazy"}
-                                        decoding="async"
-                                        fetchPriority={index < 2 ? "high" : "auto"}
-                                        className="object-contain w-full h-full transition-transform duration-700 ease-out group-hover:scale-105"
+                                        fill
+                                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                                        priority={index < 2}
+                                        className="object-contain transition-transform duration-700 ease-out group-hover:scale-105"
                                     />
-                                    {/* Overlay gradient */}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                                     {product.category && product.category !== 'general' && (
-                                        <Badge className="absolute top-2 right-2 text-[10px] h-5 px-2 capitalize bg-background/60 backdrop-blur-md border border-white/20 text-foreground shadow-sm">
+                                        <Badge className="absolute top-2 right-2 text-[10px] h-5 px-2 capitalize bg-background/90 border border-border/30 text-foreground shadow-sm">
                                             {product.category}
                                         </Badge>
                                     )}
                                 </div>
+                                <div className="mx-4 h-px bg-border/15" />
 
                                 {/* Content Section */}
-                                <CardContent className="relative z-20 flex-1 p-4 pointer-events-none">
+                                <CardContent className="relative z-20 flex-1 px-5 pb-5 pt-4 pointer-events-none">
                                     <div className="flex items-start justify-between gap-2 mb-1.5">
                                         <h3 className="font-bold text-base tracking-tight group-hover:text-primary transition-colors duration-300 leading-snug line-clamp-1" title={product.name}>
                                             {product.name}
@@ -306,7 +306,7 @@ export function HomeContent({ products, announcement, visitorCount, categories =
                                 </CardContent>
 
                                 {/* Footer Section */}
-                                <CardFooter className="relative z-20 p-4 pt-0 flex flex-wrap items-center gap-3 mt-auto border-t border-border/30 bg-muted/5 pointer-events-none">
+                                <CardFooter className="relative z-20 px-5 py-4 flex flex-wrap items-center gap-3 mt-auto border-t border-border/15 bg-transparent pointer-events-none">
                                     <div className="flex min-w-0 flex-1 flex-col">
                                         <div className="flex items-baseline gap-2">
                                             <span className="text-xl font-black text-primary tabular-nums whitespace-nowrap tracking-tight">{Number(product.price)}</span>
@@ -321,7 +321,7 @@ export function HomeContent({ products, announcement, visitorCount, categories =
                                             <div className="flex items-center text-xs text-muted-foreground">
                                                 {/* Assuming Archive icon is imported, e.g., from 'lucide-react' */}
                                                 {/* <Archive className="w-3 h-3 mr-1" /> */}
-                                                <span>{t('admin.products.stock')}: {product.stockCount >= 999999 ? '∞' : product.stockCount}</span>
+                                                <span>{t('admin.products.stock')}: {product.stockCount >= INFINITE_STOCK ? '∞' : product.stockCount}</span>
                                             </div>
                                             <span className="text-[10px] text-muted-foreground">
                                                 {t('common.sold')}: {product.soldCount}

@@ -4,8 +4,7 @@ import { and, desc, eq, or, sql } from "drizzle-orm"
 import { AdminOrdersContent } from "@/components/admin/orders-content"
 import { cancelExpiredOrders, normalizeTimestampMs, withOrderColumnFallback } from "@/lib/db/queries"
 import { PAYMENT_PRODUCT_ID } from "@/lib/payment"
-
-export const dynamic = 'force-dynamic';
+import { unstable_noStore } from "next/cache"
 
 function parseIntParam(value: unknown, fallback: number) {
     const num = typeof value === 'string' ? Number.parseInt(value, 10) : NaN
@@ -20,6 +19,7 @@ function firstParam(value: string | string[] | undefined): string | undefined {
 export default async function AdminOrdersPage(props: {
     searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+    unstable_noStore()
     const searchParams = await props.searchParams
     try {
         await cancelExpiredOrders()

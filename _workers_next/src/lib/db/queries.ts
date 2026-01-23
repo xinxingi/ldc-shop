@@ -1,5 +1,6 @@
 import { db } from "./index";
 import { products, cards, orders, settings, reviews, loginUsers, categories, userNotifications, wishlistItems, wishlistVotes } from "./schema";
+import { INFINITE_STOCK, RESERVATION_TTL_MS } from "@/lib/constants";
 import { eq, sql, desc, and, asc, gte, or, inArray } from "drizzle-orm";
 import { revalidateTag } from "next/cache";
 import { cache } from "react";
@@ -8,7 +9,15 @@ import { cache } from "react";
 let dbInitialized = false;
 let loginUsersSchemaReady = false;
 let wishlistTablesReady = false;
-const CURRENT_SCHEMA_VERSION = 10;
+const CURRENT_SCHEMA_VERSION = 12;
+
+async function ensureCardKeyDuplicatesAllowed() {
+    try {
+        await db.run(sql`DROP INDEX IF EXISTS cards_product_id_card_key_uq;`);
+    } catch {
+        // best effort
+    }
+}
 
 async function safeAddColumn(table: string, column: string, definition: string) {
     try {
@@ -99,6 +108,7 @@ async function ensureDatabaseInitialized() {
         // IMPORTANT: Even if table exists, ensure columns exist!
         await ensureProductsColumns();
         await ensureOrdersColumns();
+        await ensureCardKeyDuplicatesAllowed();
         await ensureLoginUsersTable();
         await ensureLoginUsersColumns(); // Add this call
         loginUsersSchemaReady = true;
@@ -186,6 +196,7 @@ async function ensureDatabaseInitialized() {
             username TEXT,
             points INTEGER DEFAULT 0,
             is_blocked INTEGER DEFAULT 0,
+            desktop_notifications_enabled INTEGER DEFAULT 0,
             created_at INTEGER DEFAULT (unixepoch() * 1000),
             last_login_at INTEGER DEFAULT (unixepoch() * 1000)
         );
@@ -353,6 +364,7 @@ async function ensureOrdersColumns() {
 async function ensureLoginUsersColumns() {
     await safeAddColumn('login_users', 'last_checkin_at', 'INTEGER');
     await safeAddColumn('login_users', 'consecutive_days', 'INTEGER DEFAULT 0');
+    await safeAddColumn('login_users', 'desktop_notifications_enabled', 'INTEGER DEFAULT 0');
 }
 
 export async function ensureLoginUsersSchema() {
@@ -362,6 +374,7 @@ export async function ensureLoginUsersSchema() {
     await safeAddColumn('login_users', 'email', 'TEXT');
     await safeAddColumn('login_users', 'points', 'INTEGER DEFAULT 0 NOT NULL');
     await safeAddColumn('login_users', 'is_blocked', 'INTEGER DEFAULT 0');
+    await safeAddColumn('login_users', 'desktop_notifications_enabled', 'INTEGER DEFAULT 0');
     loginUsersSchemaReady = true;
 }
 
@@ -408,7 +421,7 @@ export async function recalcProductAggregates(productId: string) {
     });
     if (!product) return;
 
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    const fiveMinutesAgo = Date.now() - RESERVATION_TTL_MS;
     let unusedCount = 0;
     let availableCount = 0;
     let lockedCount = 0;
@@ -457,7 +470,7 @@ export async function recalcProductAggregates(productId: string) {
         if (!isMissingTableOrColumn(error)) throw error;
     }
 
-    const stockCount = product.isShared ? (unusedCount > 0 ? 999999 : 0) : availableCount;
+    const stockCount = product.isShared ? (unusedCount > 0 ? INFINITE_STOCK : 0) : availableCount;
 
     await db.update(products)
         .set({
@@ -473,12 +486,165 @@ export async function recalcProductAggregates(productId: string) {
 export async function recalcProductAggregatesForMany(productIds: string[]) {
     const ids = Array.from(new Set((productIds || []).map((id) => String(id).trim()).filter(Boolean)));
     if (!ids.length) return;
-    for (const id of ids) {
-        try {
-            await recalcProductAggregates(id);
-        } catch {
-            // best effort
+
+    try {
+        await ensureProductsColumns();
+    } catch (error: any) {
+        if (isMissingTableOrColumn(error)) return;
+        throw error;
+    }
+
+    const QUERY_BATCH_SIZE = 50;
+    const UPDATE_BATCH_SIZE = 8;
+    const fiveMinutesAgo = Date.now() - RESERVATION_TTL_MS;
+
+    const aggregates = new Map<string, {
+        isShared: boolean;
+        unused: number;
+        available: number;
+        locked: number;
+        sold: number;
+        rating: number;
+        reviewCount: number;
+    }>();
+
+    for (let i = 0; i < ids.length; i += QUERY_BATCH_SIZE) {
+        const batch = ids.slice(i, i + QUERY_BATCH_SIZE);
+        const rows = await db.select({ id: products.id, isShared: products.isShared })
+            .from(products)
+            .where(inArray(products.id, batch));
+        for (const row of rows) {
+            aggregates.set(row.id, {
+                isShared: !!row.isShared,
+                unused: 0,
+                available: 0,
+                locked: 0,
+                sold: 0,
+                rating: 0,
+                reviewCount: 0
+            });
         }
+    }
+
+    const existingIds = Array.from(aggregates.keys());
+    if (!existingIds.length) return;
+
+    try {
+        for (let i = 0; i < existingIds.length; i += QUERY_BATCH_SIZE) {
+            const batch = existingIds.slice(i, i + QUERY_BATCH_SIZE);
+            const cardRows = await db.select({
+                productId: cards.productId,
+                unused: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 THEN 1 ELSE 0 END), 0)`,
+                available: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.reservedAt} IS NULL OR ${cards.reservedAt} < ${fiveMinutesAgo}) THEN 1 ELSE 0 END), 0)`,
+                locked: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND ${cards.reservedAt} IS NOT NULL AND ${cards.reservedAt} >= ${fiveMinutesAgo} THEN 1 ELSE 0 END), 0)`
+            })
+                .from(cards)
+                .where(inArray(cards.productId, batch))
+                .groupBy(cards.productId);
+
+            for (const row of cardRows) {
+                const agg = aggregates.get(row.productId);
+                if (!agg) continue;
+                agg.unused = Number(row.unused || 0);
+                agg.available = Number(row.available || 0);
+                agg.locked = Number(row.locked || 0);
+            }
+        }
+    } catch (error: any) {
+        if (!isMissingTableOrColumn(error)) throw error;
+    }
+
+    try {
+        for (let i = 0; i < existingIds.length; i += QUERY_BATCH_SIZE) {
+            const batch = existingIds.slice(i, i + QUERY_BATCH_SIZE);
+            const soldRows = await db.select({
+                productId: orders.productId,
+                total: sql<number>`COALESCE(SUM(CASE WHEN ${orders.status} IN ('paid', 'delivered') THEN ${orders.quantity} ELSE 0 END), 0)`
+            })
+                .from(orders)
+                .where(inArray(orders.productId, batch))
+                .groupBy(orders.productId);
+
+            for (const row of soldRows) {
+                const agg = aggregates.get(row.productId);
+                if (!agg) continue;
+                agg.sold = Number(row.total || 0);
+            }
+        }
+    } catch (error: any) {
+        if (!isMissingTableOrColumn(error)) throw error;
+    }
+
+    try {
+        for (let i = 0; i < existingIds.length; i += QUERY_BATCH_SIZE) {
+            const batch = existingIds.slice(i, i + QUERY_BATCH_SIZE);
+            const reviewRows = await db.select({
+                productId: reviews.productId,
+                avg: sql<number>`COALESCE(AVG(${reviews.rating}), 0)`,
+                count: sql<number>`COUNT(*)`
+            })
+                .from(reviews)
+                .where(inArray(reviews.productId, batch))
+                .groupBy(reviews.productId);
+
+            for (const row of reviewRows) {
+                const agg = aggregates.get(row.productId);
+                if (!agg) continue;
+                agg.rating = Number(row.avg || 0);
+                agg.reviewCount = Number(row.count || 0);
+            }
+        }
+    } catch (error: any) {
+        if (!isMissingTableOrColumn(error)) throw error;
+    }
+
+    const updates = existingIds.map((id) => {
+        const agg = aggregates.get(id)!;
+        const stockCount = agg.isShared ? (agg.unused > 0 ? INFINITE_STOCK : 0) : agg.available;
+        return {
+            id,
+            stockCount,
+            lockedCount: agg.locked,
+            soldCount: agg.sold,
+            rating: agg.rating,
+            reviewCount: agg.reviewCount
+        };
+    });
+
+    for (let i = 0; i < updates.length; i += UPDATE_BATCH_SIZE) {
+        const batch = updates.slice(i, i + UPDATE_BATCH_SIZE);
+        const idsBatch = batch.map((row) => row.id);
+        const stockCases = sql.join(
+            batch.map((row) => sql`WHEN ${products.id} = ${row.id} THEN ${row.stockCount}`),
+            sql` `
+        );
+        const lockedCases = sql.join(
+            batch.map((row) => sql`WHEN ${products.id} = ${row.id} THEN ${row.lockedCount}`),
+            sql` `
+        );
+        const soldCases = sql.join(
+            batch.map((row) => sql`WHEN ${products.id} = ${row.id} THEN ${row.soldCount}`),
+            sql` `
+        );
+        const ratingCases = sql.join(
+            batch.map((row) => sql`WHEN ${products.id} = ${row.id} THEN ${row.rating}`),
+            sql` `
+        );
+        const reviewCases = sql.join(
+            batch.map((row) => sql`WHEN ${products.id} = ${row.id} THEN ${row.reviewCount}`),
+            sql` `
+        );
+
+        await db.run(sql`
+            UPDATE products
+            SET
+                stock_count = CASE ${products.id} ${stockCases} ELSE ${products.stockCount} END,
+                locked_count = CASE ${products.id} ${lockedCases} ELSE ${products.lockedCount} END,
+                sold_count = CASE ${products.id} ${soldCases} ELSE ${products.soldCount} END,
+                rating = CASE ${products.id} ${ratingCases} ELSE ${products.rating} END,
+                review_count = CASE ${products.id} ${reviewCases} ELSE ${products.reviewCount} END
+            WHERE ${inArray(products.id, idsBatch)}
+        `);
     }
 }
 
@@ -489,9 +655,7 @@ async function backfillProductAggregates() {
     try {
         await ensureProductsColumns();
         const rows = await db.select({ id: products.id }).from(products);
-        for (const row of rows) {
-            await recalcProductAggregates(row.id);
-        }
+        await recalcProductAggregatesForMany(rows.map((row) => row.id));
         await markProductAggregatesBackfilled();
     } catch (error: any) {
         if (!isMissingTableOrColumn(error)) throw error;
@@ -708,9 +872,9 @@ export async function getProductForAdmin(id: string) {
 }
 
 // Dashboard Stats
-export async function getDashboardStats() {
+export async function getDashboardStats(nowMs: number) {
     return await withOrderColumnFallback(async () => {
-        const now = new Date();
+        const now = new Date(nowMs);
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const weekStart = new Date(todayStart);
         weekStart.setDate(weekStart.getDate() - 7);
@@ -1238,6 +1402,7 @@ async function ensureLoginUsersTable() {
         email TEXT,
         points INTEGER DEFAULT 0 NOT NULL,
         is_blocked BOOLEAN DEFAULT FALSE,
+        desktop_notifications_enabled INTEGER DEFAULT 0,
         created_at INTEGER DEFAULT (unixepoch() * 1000),
         last_login_at INTEGER DEFAULT (unixepoch() * 1000)
     )
@@ -1313,6 +1478,8 @@ async function ensureBroadcastTables() {
             created_at INTEGER DEFAULT (unixepoch() * 1000)
         );
     `);
+
+    await ensureCardKeyDuplicatesAllowed();
 }
 
 async function ensureWishlistTables() {
@@ -1414,7 +1581,7 @@ export async function recordLoginUser(userId: string, username?: string | null, 
         });
         if ((result as any)?.meta?.changes === 1) {
             try {
-                revalidateTag('home:visitors');
+                revalidateTag('home:visitors', 'max');
             } catch {
                 // best effort
             }
@@ -1441,7 +1608,7 @@ export async function recordLoginUser(userId: string, username?: string | null, 
             });
             if ((result as any)?.meta?.changes === 1) {
                 try {
-                    revalidateTag('home:visitors');
+                    revalidateTag('home:visitors', 'max');
                 } catch {
                     // best effort
                 }
@@ -1487,6 +1654,33 @@ export async function updateLoginUserEmail(userId: string, email: string | null)
     }
 }
 
+export async function getLoginUserDesktopNotificationsEnabled(userId: string): Promise<boolean> {
+    if (!userId) return false;
+    try {
+        const result = await db.select({ enabled: loginUsers.desktopNotificationsEnabled })
+            .from(loginUsers)
+            .where(eq(loginUsers.userId, userId))
+            .limit(1);
+        return Boolean(result[0]?.enabled);
+    } catch (error: any) {
+        if (isMissingTableOrColumn(error)) return false;
+        throw error;
+    }
+}
+
+export async function updateLoginUserDesktopNotificationsEnabled(userId: string, enabled: boolean) {
+    if (!userId) return;
+    try {
+        await ensureLoginUsersSchema();
+        await db.update(loginUsers)
+            .set({ desktopNotificationsEnabled: enabled, lastLoginAt: new Date() })
+            .where(eq(loginUsers.userId, userId));
+    } catch (error: any) {
+        if (isMissingTableOrColumn(error)) return;
+        throw error;
+    }
+}
+
 export async function getVisitorCount(): Promise<number> {
     try {
         await backfillLoginUsersFromOrdersAndReviews();
@@ -1512,7 +1706,7 @@ export async function cancelExpiredOrders(filters: { productId?: string; userId?
 
     try {
         // No transaction - D1 doesn't support SQL transactions
-        const fiveMinutesAgoMs = Date.now() - 5 * 60 * 1000;
+        const fiveMinutesAgoMs = Date.now() - RESERVATION_TTL_MS;
         const expired: any = await db.run(sql`
             UPDATE orders
             SET status = 'cancelled'
@@ -1555,7 +1749,7 @@ export async function cancelExpiredOrders(filters: { productId?: string; userId?
             // best effort
         }
         try {
-            revalidateTag('home:products');
+            revalidateTag('home:products', 'max');
         } catch {
             // best effort
         }

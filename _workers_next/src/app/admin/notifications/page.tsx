@@ -18,8 +18,8 @@ export default async function NotificationsPage() {
             resendApiKey: emailSettings.apiKey || '',
             resendFromEmail: emailSettings.fromEmail || '',
             resendFromName: emailSettings.fromName || '',
-            resendEnabled: emailSettings.enabled
+            resendEnabled: emailSettings.enabled,
+            emailLanguage: emailSettings.language || 'zh'
         }} />
     )
 }
-

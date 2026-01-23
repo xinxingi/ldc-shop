@@ -5,10 +5,10 @@ import { eq, desc, inArray } from "drizzle-orm"
 import { redirect } from "next/navigation"
 import { OrdersContent } from "@/components/orders-content"
 import { cancelExpiredOrders, normalizeTimestampMs } from "@/lib/db/queries"
-
-export const dynamic = 'force-dynamic';
+import { unstable_noStore } from "next/cache"
 
 export default async function OrdersPage() {
+    unstable_noStore()
     const session = await auth()
     if (!session?.user) redirect('/login')
 

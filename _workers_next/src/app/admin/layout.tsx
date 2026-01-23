@@ -5,8 +5,9 @@ import { UpdateNotification } from "@/components/admin/update-notification"
 import { getSetting, setSetting } from "@/lib/db/queries"
 import { RegistryPrompt } from "@/components/admin/registry-prompt"
 import { isRegistryEnabled } from "@/lib/registry"
+import { Suspense } from "react"
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+async function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     const session = await auth()
     const user = session?.user
 
@@ -58,5 +59,31 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 </main>
             </div>
         </div>
+    )
+}
+
+function AdminLayoutFallback() {
+    return (
+        <div className="flex min-h-screen flex-col">
+            <div className="h-16 border-b border-border/40 bg-background/70" />
+            <div className="flex flex-1 flex-col md:flex-row">
+                <div className="hidden md:block w-64 border-r border-border/40 bg-muted/10" />
+                <main className="flex-1 p-6 md:p-12">
+                    <div className="space-y-4">
+                        <div className="h-8 w-40 rounded-md bg-muted/60 animate-pulse" />
+                        <div className="h-24 w-full rounded-xl bg-muted/40 animate-pulse" />
+                        <div className="h-24 w-full rounded-xl bg-muted/40 animate-pulse" />
+                    </div>
+                </main>
+            </div>
+        </div>
+    )
+}
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <Suspense fallback={<AdminLayoutFallback />}>
+            <AdminLayoutContent>{children}</AdminLayoutContent>
+        </Suspense>
     )
 }

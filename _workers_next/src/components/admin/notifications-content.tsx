@@ -19,6 +19,7 @@ interface NotificationsContentProps {
         resendFromEmail: string
         resendFromName: string
         resendEnabled: boolean
+        emailLanguage?: string | null
     }
 }
 
@@ -34,6 +35,7 @@ export function NotificationsContent({ settings }: NotificationsContentProps) {
     const [resendApiKey, setResendApiKey] = useState(settings.resendApiKey || '')
     const [resendFromEmail, setResendFromEmail] = useState(settings.resendFromEmail || '')
     const [resendFromName, setResendFromName] = useState(settings.resendFromName || '')
+    const [emailLanguage, setEmailLanguage] = useState(settings.emailLanguage || 'zh')
     const [isTestingEmail, setIsTestingEmail] = useState(false)
     const [testEmail, setTestEmail] = useState('')
 
@@ -128,24 +130,26 @@ export function NotificationsContent({ settings }: NotificationsContentProps) {
                 </CardHeader>
                 <CardContent>
                     <form action={handleSave} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label>{t('admin.settings.notifications.telegramBotToken')}</Label>
+                        <div className="floating-field">
                             <Input
                                 name="telegramBotToken"
                                 value={token}
                                 onChange={e => setToken(e.target.value)}
-                                placeholder={t('admin.settings.notifications.telegramBotTokenPlaceholder') || ''}
+                                placeholder=" "
                                 type="password"
                             />
+                            <Label className="floating-label">{t('admin.settings.notifications.telegramBotToken')}</Label>
                         </div>
                         <div className="space-y-2">
-                            <Label>{t('admin.settings.notifications.telegramChatId')}</Label>
-                            <Input
-                                name="telegramChatId"
-                                value={chatId}
-                                onChange={e => setChatId(e.target.value)}
-                                placeholder={t('admin.settings.notifications.telegramChatIdPlaceholder') || ''}
-                            />
+                            <div className="floating-field">
+                                <Input
+                                    name="telegramChatId"
+                                    value={chatId}
+                                    onChange={e => setChatId(e.target.value)}
+                                    placeholder=" "
+                                />
+                                <Label className="floating-label">{t('admin.settings.notifications.telegramChatId')}</Label>
+                            </div>
                         </div>
                         <div className="space-y-2">
                             <Label>{t('admin.settings.notifications.language')}</Label>
@@ -168,6 +172,7 @@ export function NotificationsContent({ settings }: NotificationsContentProps) {
                                 </Button>
                             </div>
                             <input type="hidden" name="telegramLanguage" value={language} />
+                            <input type="hidden" name="emailLanguage" value={emailLanguage} />
                             <p className="text-xs text-muted-foreground">{t('admin.settings.notifications.languageHint')}</p>
                         </div>
 
@@ -209,39 +214,63 @@ export function NotificationsContent({ settings }: NotificationsContentProps) {
                             <Label htmlFor="resendEnabledCheckbox">{t('admin.settings.email.enabled')}</Label>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label>{t('admin.settings.email.apiKey')}</Label>
+                        <div className="floating-field">
                             <Input
                                 name="resendApiKey"
                                 value={resendApiKey}
                                 onChange={e => setResendApiKey(e.target.value)}
-                                placeholder="re_xxxxxxxx"
+                                placeholder=" "
                                 type="password"
                             />
+                            <Label className="floating-label">{t('admin.settings.email.apiKey')}</Label>
                             <p className="text-xs text-muted-foreground">
                                 {t('admin.settings.email.apiKeyHint')} <a href="https://resend.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">resend.com</a>
                             </p>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label>{t('admin.settings.email.fromEmail')}</Label>
+                        <div className="floating-field">
                             <Input
                                 name="resendFromEmail"
                                 value={resendFromEmail}
                                 onChange={e => setResendFromEmail(e.target.value)}
-                                placeholder="noreply@yourdomain.com"
+                                placeholder=" "
                             />
+                            <Label className="floating-label">{t('admin.settings.email.fromEmail')}</Label>
                             <p className="text-xs text-muted-foreground">{t('admin.settings.email.fromEmailHint')}</p>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label>{t('admin.settings.email.fromName')}</Label>
+                        <div className="floating-field">
                             <Input
                                 name="resendFromName"
                                 value={resendFromName}
                                 onChange={e => setResendFromName(e.target.value)}
-                                placeholder="LDC Shop"
+                                placeholder=" "
                             />
+                            <Label className="floating-label">{t('admin.settings.email.fromName')}</Label>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>{t('admin.settings.email.language')}</Label>
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    variant={emailLanguage === 'zh' ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setEmailLanguage('zh')}
+                                >
+                                    中文
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={emailLanguage === 'en' ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => setEmailLanguage('en')}
+                                >
+                                    English
+                                </Button>
+                            </div>
+                            <input type="hidden" name="emailLanguage" value={emailLanguage} />
+                            <p className="text-xs text-muted-foreground">{t('admin.settings.email.languageHint')}</p>
                         </div>
 
                         {/* Hidden fields for telegram settings */}
@@ -260,12 +289,14 @@ export function NotificationsContent({ settings }: NotificationsContentProps) {
                         <div className="mt-4 pt-4 border-t">
                             <Label>{t('admin.settings.email.testLabel')}</Label>
                             <div className="flex gap-2 mt-2">
-                                <Input
-                                    value={testEmail}
-                                    onChange={e => setTestEmail(e.target.value)}
-                                    placeholder={t('admin.settings.email.testPlaceholder') || ''}
-                                    className="flex-1"
-                                />
+                                <div className="floating-field flex-1 min-w-0">
+                                    <Input
+                                        value={testEmail}
+                                        onChange={e => setTestEmail(e.target.value)}
+                                        placeholder=" "
+                                    />
+                                    <Label className="floating-label">{t('admin.settings.email.testPlaceholder')}</Label>
+                                </div>
                                 <Button variant="secondary" onClick={handleTestEmail} disabled={isTestingEmail}>
                                     {isTestingEmail ? t('common.processing') : t('admin.settings.email.testButton')}
                                 </Button>
@@ -362,4 +393,3 @@ export function NotificationsContent({ settings }: NotificationsContentProps) {
         </div>
     )
 }
-

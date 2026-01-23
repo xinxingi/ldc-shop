@@ -5,16 +5,14 @@ import { db } from "@/lib/db"
 import { products, cards, reviews, categories } from "@/lib/db/schema"
 import { eq, sql, inArray, and, or, isNull, lte } from "drizzle-orm"
 import { sendTelegramMessage } from "@/lib/notifications"
-import { revalidatePath, revalidateTag } from "next/cache"
+import { revalidatePath, updateTag } from "next/cache"
 import { setSetting, getSetting, recalcProductAggregates, recalcProductAggregatesForMany } from "@/lib/db/queries"
+import { isAdminUsername } from "@/lib/admin-auth"
 
-// Check Admin Helper
-// Check Admin Helper
 export async function checkAdmin() {
     const session = await auth()
     const user = session?.user
-    const adminUsers = process.env.ADMIN_USERS?.toLowerCase().split(',') || []
-    if (!user || !user.username || !adminUsers.includes(user.username.toLowerCase())) {
+    if (!user || !isAdminUsername(user.username)) {
         throw new Error("Unauthorized")
     }
 }
@@ -128,10 +126,10 @@ export async function saveProduct(formData: FormData) {
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:ratings')
-    revalidateTag('home:categories')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:ratings')
+    updateTag('home:categories')
+    updateTag('home:product-categories')
 }
 
 export async function deleteProduct(id: string) {
@@ -140,10 +138,10 @@ export async function deleteProduct(id: string) {
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:ratings')
-    revalidateTag('home:categories')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:ratings')
+    updateTag('home:categories')
+    updateTag('home:product-categories')
 }
 
 export async function toggleProductStatus(id: string, isActive: boolean) {
@@ -152,8 +150,8 @@ export async function toggleProductStatus(id: string, isActive: boolean) {
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function reorderProduct(id: string, newOrder: number) {
@@ -162,8 +160,8 @@ export async function reorderProduct(id: string, newOrder: number) {
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function addCards(formData: FormData) {
@@ -178,12 +176,6 @@ export async function addCards(formData: FormData) {
         .filter(c => c)
 
     if (cardList.length === 0) return
-
-    try {
-        await db.run(sql`DROP INDEX IF EXISTS cards_product_id_card_key_uq;`)
-    } catch {
-        // best effort
-    }
 
     // D1 has a limit on SQL variables (around 100 bindings per query)
     // Drizzle generates bindings for all columns (~8), so 100/8 ≈ 12 max
@@ -207,8 +199,8 @@ export async function addCards(formData: FormData) {
     revalidatePath('/admin/settings')
     revalidatePath(`/admin/cards/${productId}`)
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function deleteCard(cardId: number) {
@@ -241,8 +233,8 @@ export async function deleteCard(cardId: number) {
     revalidatePath('/admin/settings')
     revalidatePath('/admin/cards')
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function deleteCards(cardIds: number[]) {
@@ -283,8 +275,8 @@ export async function deleteCards(cardIds: number[]) {
     revalidatePath('/admin/settings')
     revalidatePath('/admin/cards')
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function saveShopName(rawName: string) {
@@ -321,8 +313,8 @@ export async function saveShopName(rawName: string) {
     revalidatePath('/')
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function saveShopDescription(rawDesc: string) {
@@ -337,8 +329,8 @@ export async function saveShopDescription(rawDesc: string) {
     revalidatePath('/')
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function saveShopLogo(logoUrl: string) {
@@ -355,8 +347,8 @@ export async function saveShopLogo(logoUrl: string) {
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
     revalidatePath('/admin/settings')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function saveRefundReclaimCards(enabled: boolean) {
@@ -369,7 +361,7 @@ export async function deleteReview(reviewId: number) {
     await checkAdmin()
     await db.delete(reviews).where(eq(reviews.id, reviewId))
     revalidatePath('/admin/reviews')
-    revalidateTag('home:ratings')
+    updateTag('home:ratings')
     revalidatePath('/')
 }
 
@@ -380,8 +372,8 @@ export async function saveLowStockThreshold(raw: string) {
     await setSetting('low_stock_threshold', value)
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function saveCheckinReward(raw: string) {
@@ -391,8 +383,8 @@ export async function saveCheckinReward(raw: string) {
     await setSetting('checkin_reward', value)
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function saveCheckinEnabled(enabled: boolean) {
@@ -401,8 +393,8 @@ export async function saveCheckinEnabled(enabled: boolean) {
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function saveNoIndex(enabled: boolean) {
@@ -411,8 +403,8 @@ export async function saveNoIndex(enabled: boolean) {
     revalidatePath('/admin/products')
     revalidatePath('/admin/settings')
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function saveWishlistEnabled(enabled: boolean) {
@@ -443,8 +435,8 @@ export async function saveShopFooter(footer: string) {
     await setSetting('shop_footer', text)
     revalidatePath('/admin/settings')
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 const VALID_THEME_COLORS = ['purple', 'indigo', 'blue', 'cyan', 'teal', 'green', 'lime', 'amber', 'orange', 'red', 'rose', 'pink', 'black']
@@ -459,8 +451,8 @@ export async function saveThemeColor(color: string) {
     await setSetting('theme_color', color)
     revalidatePath('/admin/settings')
     revalidatePath('/')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function saveNotificationSettings(formData: FormData) {
@@ -479,11 +471,14 @@ export async function saveNotificationSettings(formData: FormData) {
     const resendFromEmail = (formData.get('resendFromEmail') as string || '').trim()
     const resendFromName = (formData.get('resendFromName') as string || '').trim()
     const resendEnabled = formData.get('resendEnabled') === 'true'
+    const emailLanguageRaw = (formData.get('emailLanguage') as string || '').trim()
+    const emailLanguage = emailLanguageRaw === 'en' ? 'en' : 'zh'
 
     await setSetting('resend_api_key', resendApiKey)
     await setSetting('resend_from_email', resendFromEmail)
     await setSetting('resend_from_name', resendFromName)
     await setSetting('resend_enabled', resendEnabled ? 'true' : 'false')
+    await setSetting('email_language', emailLanguage)
 
     revalidatePath('/admin/notifications')
 }
@@ -532,9 +527,9 @@ export async function saveCategory(formData: FormData) {
 
     revalidatePath('/admin/categories')
     revalidatePath('/')
-    revalidateTag('home:categories')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }
 
 export async function deleteCategory(id: number) {
@@ -543,7 +538,7 @@ export async function deleteCategory(id: number) {
     await db.delete(categories).where(eq(categories.id, id))
     revalidatePath('/admin/categories')
     revalidatePath('/')
-    revalidateTag('home:categories')
-    revalidateTag('home:products')
-    revalidateTag('home:product-categories')
+    updateTag('home:categories')
+    updateTag('home:products')
+    updateTag('home:product-categories')
 }

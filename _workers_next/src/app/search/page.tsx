@@ -1,7 +1,6 @@
 import { searchActiveProducts, getCategories } from "@/lib/db/queries"
 import { SearchContent } from "@/components/search-content"
-
-export const dynamic = 'force-dynamic';
+import { unstable_noStore } from "next/cache"
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   if (!value) return undefined
@@ -16,6 +15,7 @@ function parseIntParam(value: unknown, fallback: number) {
 export default async function SearchPage(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  unstable_noStore()
   const searchParams = await props.searchParams
   const q = (firstParam(searchParams.q) || '').trim()
   const category = (firstParam(searchParams.category) || 'all').trim()
@@ -52,4 +52,3 @@ export default async function SearchPage(props: {
     />
   )
 }
-

@@ -354,14 +354,16 @@ export function AdminSettingsContent({ stats, shopName, shopDescription, shopLog
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid gap-2 md:max-w-xl">
-                        <Label htmlFor="shop-name">{t('admin.settings.shopName')}</Label>
                         <div className="flex gap-2">
-                            <Input
-                                id="shop-name"
-                                value={shopNameValue}
-                                onChange={(e) => setShopNameValue(e.target.value)}
-                                placeholder={t('admin.settings.shopNamePlaceholder')}
-                            />
+                            <div className="floating-field flex-1 min-w-0">
+                                <Input
+                                    id="shop-name"
+                                    value={shopNameValue}
+                                    onChange={(e) => setShopNameValue(e.target.value)}
+                                    placeholder=" "
+                                />
+                                <Label htmlFor="shop-name" className="floating-label">{t('admin.settings.shopName')}</Label>
+                            </div>
                             <Button onClick={handleSaveShopName} disabled={savingShopName}>
                                 {savingShopName ? t('common.processing') : t('common.save')}
                             </Button>
@@ -369,28 +371,32 @@ export function AdminSettingsContent({ stats, shopName, shopDescription, shopLog
                         <p className="text-xs text-muted-foreground">{t('admin.settings.shopNameHint')}</p>
                     </div>
                     <div className="grid gap-2 md:max-w-xl">
-                        <Label htmlFor="shop-desc">{t('admin.settings.shopDescription')}</Label>
                         <div className="flex gap-2">
-                            <Input
-                                id="shop-desc"
-                                value={shopDescValue}
-                                onChange={(e) => setShopDescValue(e.target.value)}
-                                placeholder={t('admin.settings.shopDescPlaceholder')}
-                            />
+                            <div className="floating-field flex-1 min-w-0">
+                                <Input
+                                    id="shop-desc"
+                                    value={shopDescValue}
+                                    onChange={(e) => setShopDescValue(e.target.value)}
+                                    placeholder=" "
+                                />
+                                <Label htmlFor="shop-desc" className="floating-label">{t('admin.settings.shopDescription')}</Label>
+                            </div>
                             <Button variant="outline" onClick={handleSaveShopDesc} disabled={savingShopDesc}>
                                 {savingShopDesc ? t('common.processing') : t('common.save')}
                             </Button>
                         </div>
                     </div>
                     <div className="grid gap-2 md:max-w-xl">
-                        <Label htmlFor="shop-logo">{t('admin.settings.shopLogo')}</Label>
                         <div className="flex gap-2">
-                            <Input
-                                id="shop-logo"
-                                value={shopLogoValue}
-                                onChange={(e) => setShopLogoValue(e.target.value)}
-                                placeholder={t('admin.settings.shopLogoPlaceholder')}
-                            />
+                            <div className="floating-field flex-1 min-w-0">
+                                <Input
+                                    id="shop-logo"
+                                    value={shopLogoValue}
+                                    onChange={(e) => setShopLogoValue(e.target.value)}
+                                    placeholder=" "
+                                />
+                                <Label htmlFor="shop-logo" className="floating-label">{t('admin.settings.shopLogo')}</Label>
+                            </div>
                             <Button variant="outline" onClick={handleSaveShopLogo} disabled={savingShopLogo}>
                                 {savingShopLogo ? t('common.processing') : t('common.save')}
                             </Button>
@@ -404,15 +410,17 @@ export function AdminSettingsContent({ stats, shopName, shopDescription, shopLog
                         )}
                     </div>
                     <div className="grid gap-2 md:max-w-xs">
-                        <Label htmlFor="low-stock">{t('admin.settings.lowStockThreshold')}</Label>
                         <div className="flex gap-2">
-                            <Input
-                                id="low-stock"
-                                type="number"
-                                value={thresholdValue}
-                                onChange={(e) => setThresholdValue(e.target.value)}
-                                placeholder="5"
-                            />
+                            <div className="floating-field flex-1 min-w-0">
+                                <Input
+                                    id="low-stock"
+                                    type="number"
+                                    value={thresholdValue}
+                                    onChange={(e) => setThresholdValue(e.target.value)}
+                                    placeholder=" "
+                                />
+                                <Label htmlFor="low-stock" className="floating-label">{t('admin.settings.lowStockThreshold')}</Label>
+                            </div>
                             <Button variant="outline" onClick={handleSaveThreshold} disabled={savingThreshold}>
                                 {savingThreshold ? t('common.processing') : t('common.save')}
                             </Button>
@@ -442,15 +450,17 @@ export function AdminSettingsContent({ stats, shopName, shopDescription, shopLog
                     </div>
                     {enabledCheckin && (
                         <div className="grid gap-2 md:max-w-xs">
-                            <Label htmlFor="checkin-reward">{t('admin.settings.checkin.rewardTooltip')}</Label>
                             <div className="flex gap-2">
-                                <Input
-                                    id="checkin-reward"
-                                    type="number"
-                                    value={rewardValue}
-                                    onChange={(e) => setRewardValue(e.target.value)}
-                                    placeholder="10"
-                                />
+                                <div className="floating-field flex-1 min-w-0">
+                                    <Input
+                                        id="checkin-reward"
+                                        type="number"
+                                        value={rewardValue}
+                                        onChange={(e) => setRewardValue(e.target.value)}
+                                        placeholder=" "
+                                    />
+                                    <Label htmlFor="checkin-reward" className="floating-label">{t('admin.settings.checkin.rewardTooltip')}</Label>
+                                </div>
                                 <Button variant="outline" onClick={handleSaveReward} disabled={savingReward}>
                                     {savingReward ? t('common.processing') : t('common.save')}
                                 </Button>
@@ -586,9 +596,6 @@ export function AdminSettingsContent({ stats, shopName, shopDescription, shopLog
 
             {/* Wishlist Settings */}
             <Card>
-                <CardHeader>
-                    <CardTitle>{t('admin.settings.wishlist.title')}</CardTitle>
-                </CardHeader>
                 <CardContent className="space-y-2">
                     <div className="flex items-center gap-4">
                         <Label htmlFor="wishlist-enable" className="cursor-pointer">{t('admin.settings.wishlist.title')}</Label>

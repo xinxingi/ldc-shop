@@ -1,18 +1,20 @@
 import { getSetting } from "./db/queries"
 
 export async function getEmailSettings() {
-    const [apiKey, fromEmail, fromName, enabled] = await Promise.all([
+    const [apiKey, fromEmail, fromName, enabled, language] = await Promise.all([
         getSetting('resend_api_key'),
         getSetting('resend_from_email'),
         getSetting('resend_from_name'),
-        getSetting('resend_enabled')
+        getSetting('resend_enabled'),
+        getSetting('email_language')
     ])
 
     return {
         apiKey,
         fromEmail,
         fromName: fromName || 'LDC Shop',
-        enabled: enabled === 'true'
+        enabled: enabled === 'true',
+        language: language || null
     }
 }
 
@@ -124,9 +126,12 @@ export async function sendOrderEmail(params: OrderEmailParams) {
             return { success: false, error: 'No recipient email' }
         }
 
-        // Use notification language setting for email
-        const langSetting = await getSetting('telegram_language')
-        const lang = params.language || langSetting || 'zh'
+        // Prefer dedicated email language setting, fallback to telegram language for backward compatibility
+        const [emailLang, telegramLang] = await Promise.all([
+            getSetting('email_language'),
+            getSetting('telegram_language')
+        ])
+        const lang = params.language || emailLang || telegramLang || 'zh'
         const template = emailTemplates[lang as keyof typeof emailTemplates] || emailTemplates.zh
 
         const response = await fetch('https://api.resend.com/emails', {

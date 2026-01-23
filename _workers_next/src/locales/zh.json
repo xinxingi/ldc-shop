@@ -344,6 +344,8 @@
                 "fromEmail": "发件人邮箱",
                 "fromEmailHint": "需要在 Resend 验证的域名邮箱",
                 "fromName": "发件人名称",
+                "language": "邮件语言",
+                "languageHint": "用于订单邮件语言，未设置时将回退到 Telegram 语言。",
                 "testLabel": "测试邮件发送",
                 "testPlaceholder": "输入测试邮箱地址",
                 "testButton": "发送测试",
@@ -525,7 +527,7 @@
             "markRefunded": "标记已退款",
             "refundConfirm": "这将在新标签页中打开退款页面。步骤：1. 在新标签页中完成退款 2. 在 Linux DO Credit 后台确认退款成功 3. 返回此处点击【标记已退款】继续？",
             "refundProxyConfirm": "确认执行退款？",
-            "refundProxyNotProcessed": "代理请求已返回但未确认成功；必要时请使用手动退款流程。",
+            "refundProxyNotProcessed": "代理请求已返回但未确认成功；请在支付平台核实后点击【标记已退款】。",
             "refundVerify": "您是否已在 Linux DO Credit 后台确认退款成功？",
             "refundSuccess": "订单已标记为已退款",
             "refundInfo": "确认退款成功后，点击【标记已退款】",
@@ -534,7 +536,7 @@
             "verifySuccessRefunded": "已查询到退款成功！",
             "verifyInfoPaid": "验证结果：订单支付正常（未退款）",
             "verifyStatus": "状态验证",
-            "proxyFailedTryManual": "服务端退款失败。尝试客户端手动退款？",
+            "proxyFailedTryManual": "服务端退款失败，请在支付平台核实后点击【标记已退款】。",
             "tryManual": "客户端退款"
         },
         "cards": {
@@ -600,6 +602,20 @@
         "clearInbox": "清空收件箱",
         "inboxCleared": "收件箱已清空",
         "unread": "未读",
+        "desktopNotifications": {
+            "title": "桌面通知",
+            "desc": "当有新消息或更新时显示浏览器通知。",
+            "enabled": "已开启",
+            "disabled": "已关闭",
+            "unsupported": "当前浏览器不支持桌面通知。",
+            "permissionDenied": "通知权限被拒绝。",
+            "enabledToast": "桌面通知已开启",
+            "disabledToast": "桌面通知已关闭",
+            "testTitle": "已开启桌面通知",
+            "testBody": "有新消息时将通过桌面通知提醒你。",
+            "newTitle": "新通知",
+            "newBody": "你有 {{count}} 条未读通知。"
+        },
         "messages": {
             "title": "联系管理员",
             "titleLabel": "标题",
@@ -620,7 +636,7 @@
             "refundRejectedBody": "您的订单 {{orderId}} 的退款申请被拒绝。",
             "refundRejectedBodyWithNote": "您的订单 {{orderId}} 的退款申请被拒绝。备注：{{adminNote}}",
             "adminMessageTitle": "管理员消息",
-            "adminMessageBody": "{{body}}"
+            "adminMessageBody": "您收到了管理员的消息。"
         }
     },
     "language": {

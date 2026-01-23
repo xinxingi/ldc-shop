@@ -2,9 +2,8 @@ import { getActiveProductCategories, getCategories, getActiveProducts, getVisito
 import { getActiveAnnouncement } from "@/actions/settings";
 import { auth } from "@/lib/auth";
 import { HomeContent } from "@/components/home-content";
-import { unstable_cache } from "next/cache";
+import { cacheLife, cacheTag } from "next/cache";
 
-const CACHE_TTL_SECONDS = 60 * 60 * 24;
 const TAG_PRODUCTS = "home:products";
 const TAG_RATINGS = "home:ratings";
 const TAG_ANNOUNCEMENT = "home:announcement";
@@ -14,29 +13,40 @@ const TAG_PRODUCT_CATEGORIES = "home:product-categories";
 
 const PAGE_SIZE = 24;
 
-const getCachedAnnouncement = unstable_cache(
-  async () => getActiveAnnouncement(),
-  ["active-announcement"],
-  { revalidate: CACHE_TTL_SECONDS, tags: [TAG_ANNOUNCEMENT] }
-);
+const getCachedAnnouncement = async () => {
+  'use cache'
+  cacheTag(TAG_ANNOUNCEMENT)
+  cacheLife('days')
+  return getActiveAnnouncement()
+}
 
-const getCachedVisitorCount = unstable_cache(
-  async () => getVisitorCount(),
-  ["visitor-count"],
-  { revalidate: CACHE_TTL_SECONDS, tags: [TAG_VISITORS] }
-);
+const getCachedVisitorCount = async () => {
+  'use cache'
+  cacheTag(TAG_VISITORS)
+  cacheLife('days')
+  return getVisitorCount()
+}
 
-const getCachedCategories = unstable_cache(
-  async () => getCategories(),
-  ["categories"],
-  { revalidate: CACHE_TTL_SECONDS, tags: [TAG_CATEGORIES] }
-);
+const getCachedCategories = async () => {
+  'use cache'
+  cacheTag(TAG_CATEGORIES)
+  cacheLife('days')
+  return getCategories()
+}
 
-const getCachedProductCategories = unstable_cache(
-  async () => getActiveProductCategories(),
-  ["active-product-categories"],
-  { revalidate: CACHE_TTL_SECONDS, tags: [TAG_PRODUCT_CATEGORIES, TAG_PRODUCTS] }
-);
+const getCachedProductCategories = async () => {
+  'use cache'
+  cacheTag(TAG_PRODUCT_CATEGORIES, TAG_PRODUCTS)
+  cacheLife('days')
+  return getActiveProductCategories()
+}
+
+const getCachedProducts = async () => {
+  'use cache'
+  cacheTag(TAG_PRODUCTS)
+  cacheLife('days')
+  return getActiveProducts()
+}
 
 function stripMarkdown(input: string): string {
   return input
@@ -63,11 +73,7 @@ export default async function Home({
 
   // Run all independent queries in parallel for better performance
   const [products, announcement, visitorCount, categoryConfig, productCategories, wishlistEnabled] = await Promise.all([
-    unstable_cache(
-      async () => getActiveProducts(),
-      ["active-products"],
-      { revalidate: CACHE_TTL_SECONDS, tags: [TAG_PRODUCTS] }
-    )().catch(() => []),
+    getCachedProducts().catch(() => []),
     getCachedAnnouncement().catch(() => null),
     getCachedVisitorCount().catch(() => 0),
     getCachedCategories().catch(() => []),

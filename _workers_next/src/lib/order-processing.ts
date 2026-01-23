@@ -5,7 +5,9 @@ import { isPaymentOrder } from "@/lib/payment";
 import { notifyAdminPaymentSuccess } from "@/lib/notifications";
 import { sendOrderEmail } from "@/lib/email";
 import { recalcProductAggregates, createUserNotification } from "@/lib/db/queries";
+import { RESERVATION_TTL_MS } from "@/lib/constants";
 import { revalidateTag } from "next/cache";
+import { after } from "next/server";
 
 export async function processOrderFulfillment(orderId: string, paidAmount: number, tradeNo: string) {
     const order = await db.query.orders.findFirst({
@@ -31,7 +33,7 @@ export async function processOrderFulfillment(orderId: string, paidAmount: numbe
             // best effort
         }
         try {
-            revalidateTag('home:products');
+            revalidateTag('home:products', 'max');
         } catch {
             // best effort
         }
@@ -65,19 +67,25 @@ export async function processOrderFulfillment(orderId: string, paidAmount: numbe
                 .where(eq(orders.orderId, orderId));
 
             // Notify Admin
-            const user = await db.query.loginUsers.findFirst({
-                where: eq(users.userId, order.userId || ''),
-                columns: { username: true }
-            }).catch(() => null);
+            after(async () => {
+                try {
+                    const user = await db.query.loginUsers.findFirst({
+                        where: eq(users.userId, order.userId || ''),
+                        columns: { username: true }
+                    }).catch(() => null);
 
-            await notifyAdminPaymentSuccess({
-                orderId: orderId,
-                productName: "Payment (QR/Link)",
-                amount: order.amount,
-                username: user?.username,
-                email: order.email,
-                tradeNo: tradeNo
-            });
+                    await notifyAdminPaymentSuccess({
+                        orderId: orderId,
+                        productName: "Payment (QR/Link)",
+                        amount: order.amount,
+                        username: user?.username,
+                        email: order.email,
+                        tradeNo: tradeNo
+                    });
+                } catch (err) {
+                    console.error('[Notification] Payment order notify failed:', err);
+                }
+            })
         }
         await refreshAggregates();
         return { success: true, status: 'processed' };
@@ -122,32 +130,40 @@ export async function processOrderFulfillment(orderId: string, paidAmount: numbe
 
                 console.log(`[Fulfill] Shared product order ${orderId} delivered. Card: ${key}`);
 
-                await notifyUserDelivered(product?.name);
+                after(async () => {
+                    try {
+                        await notifyUserDelivered(product?.name);
+                    } catch (err) {
+                        console.error('[Notification] User delivery notify failed:', err);
+                    }
 
-                // Notify Admin
-                const user = await db.query.loginUsers.findFirst({
-                    where: eq(users.userId, order.userId || ''),
-                    columns: { username: true }
-                }).catch(() => null);
+                    try {
+                        const user = await db.query.loginUsers.findFirst({
+                            where: eq(users.userId, order.userId || ''),
+                            columns: { username: true }
+                        }).catch(() => null);
 
-                await notifyAdminPaymentSuccess({
-                    orderId: orderId,
-                    productName: product?.name || 'Shared Product',
-                    amount: order.amount,
-                    username: user?.username,
-                    email: order.email,
-                    tradeNo: tradeNo
-                });
+                        await notifyAdminPaymentSuccess({
+                            orderId: orderId,
+                            productName: product?.name || 'Shared Product',
+                            amount: order.amount,
+                            username: user?.username,
+                            email: order.email,
+                            tradeNo: tradeNo
+                        });
+                    } catch (err) {
+                        console.error('[Notification] Shared product notify failed:', err);
+                    }
 
-                // Send email with card keys
-                if (order.email) {
-                    await sendOrderEmail({
-                        to: order.email,
-                        orderId: orderId,
-                        productName: product?.name || 'Product',
-                        cardKeys: cardKeys.join('\n')
-                    }).catch(err => console.error('[Email] Send failed:', err));
-                }
+                    if (order.email) {
+                        await sendOrderEmail({
+                            to: order.email,
+                            orderId: orderId,
+                            productName: product?.name || 'Product',
+                            cardKeys: cardKeys.join('\n')
+                        }).catch(err => console.error('[Email] Send failed:', err));
+                    }
+                })
 
                 await refreshAggregates();
                 return { success: true, status: 'processed' };
@@ -158,20 +174,25 @@ export async function processOrderFulfillment(orderId: string, paidAmount: numbe
                     .where(eq(orders.orderId, orderId));
                 console.log(`[Fulfill] Order ${orderId} marked as paid (no stock for shared product)`);
 
-                // Notify Admin
-                const user = await db.query.loginUsers.findFirst({
-                    where: eq(users.userId, order.userId || ''),
-                    columns: { username: true }
-                }).catch(() => null);
+                after(async () => {
+                    try {
+                        const user = await db.query.loginUsers.findFirst({
+                            where: eq(users.userId, order.userId || ''),
+                            columns: { username: true }
+                        }).catch(() => null);
 
-                await notifyAdminPaymentSuccess({
-                    orderId: orderId,
-                    productName: product?.name || 'Shared Product',
-                    amount: order.amount,
-                    username: user?.username,
-                    email: order.email,
-                    tradeNo: tradeNo
-                });
+                        await notifyAdminPaymentSuccess({
+                            orderId: orderId,
+                            productName: product?.name || 'Shared Product',
+                            amount: order.amount,
+                            username: user?.username,
+                            email: order.email,
+                            tradeNo: tradeNo
+                        });
+                    } catch (err) {
+                        console.error('[Notification] Shared product notify failed:', err);
+                    }
+                })
 
                 await refreshAggregates();
                 return { success: true, status: 'processed' };
@@ -181,7 +202,7 @@ export async function processOrderFulfillment(orderId: string, paidAmount: numbe
         const quantity = order.quantity || 1;
         let cardKeys: string[] = [];
         const usedCardIds: number[] = [];
-        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+        const fiveMinutesAgo = Date.now() - RESERVATION_TTL_MS;
 
         // 1. Reserved cards
         try {
@@ -243,37 +264,45 @@ export async function processOrderFulfillment(orderId: string, paidAmount: numbe
                 .where(eq(orders.orderId, orderId));
             console.log(`[Fulfill] Order ${orderId} delivered successfully!`);
 
-            // Notify Admin
-            const user = await db.query.loginUsers.findFirst({
-                where: eq(users.userId, order.userId || ''),
-                columns: { username: true }
-            }).catch(() => null);
+            after(async () => {
+                const product = await db.query.products.findFirst({
+                    where: eq(products.id, order.productId),
+                    columns: { name: true }
+                });
 
-            const product = await db.query.products.findFirst({
-                where: eq(products.id, order.productId),
-                columns: { name: true }
-            });
+                try {
+                    const user = await db.query.loginUsers.findFirst({
+                        where: eq(users.userId, order.userId || ''),
+                        columns: { username: true }
+                    }).catch(() => null);
 
-            await notifyAdminPaymentSuccess({
-                orderId: orderId,
-                productName: product?.name || 'Unknown Product',
-                amount: order.amount,
-                username: user?.username,
-                email: order.email,
-                tradeNo: tradeNo
-            });
+                    await notifyAdminPaymentSuccess({
+                        orderId: orderId,
+                        productName: product?.name || 'Unknown Product',
+                        amount: order.amount,
+                        username: user?.username,
+                        email: order.email,
+                        tradeNo: tradeNo
+                    });
+                } catch (err) {
+                    console.error('[Notification] Delivery notify failed:', err);
+                }
 
-            await notifyUserDelivered(product?.name || order.productName);
+                try {
+                    await notifyUserDelivered(product?.name || order.productName);
+                } catch (err) {
+                    console.error('[Notification] User delivery notify failed:', err);
+                }
 
-            // Send email with card keys
-            if (order.email) {
-                await sendOrderEmail({
-                    to: order.email,
-                    orderId: orderId,
-                    productName: product?.name || 'Product',
-                    cardKeys: joinedKeys
-                }).catch(err => console.error('[Email] Send failed:', err));
-            }
+                if (order.email) {
+                    await sendOrderEmail({
+                        to: order.email,
+                        orderId: orderId,
+                        productName: product?.name || 'Product',
+                        cardKeys: joinedKeys
+                    }).catch(err => console.error('[Email] Send failed:', err));
+                }
+            })
         } else {
             // Paid but no stock
             await db.update(orders)
@@ -281,25 +310,30 @@ export async function processOrderFulfillment(orderId: string, paidAmount: numbe
                 .where(eq(orders.orderId, orderId));
             console.log(`[Fulfill] Order ${orderId} marked as paid (no stock)`);
 
-            // Notify Admin
-            const user = await db.query.loginUsers.findFirst({
-                where: eq(users.userId, order.userId || ''),
-                columns: { username: true }
-            }).catch(() => null);
+            after(async () => {
+                try {
+                    const user = await db.query.loginUsers.findFirst({
+                        where: eq(users.userId, order.userId || ''),
+                        columns: { username: true }
+                    }).catch(() => null);
 
-            const product = await db.query.products.findFirst({
-                where: eq(products.id, order.productId),
-                columns: { name: true }
-            });
+                    const product = await db.query.products.findFirst({
+                        where: eq(products.id, order.productId),
+                        columns: { name: true }
+                    });
 
-            await notifyAdminPaymentSuccess({
-                orderId: orderId,
-                productName: product?.name || 'Unknown Product',
-                amount: order.amount,
-                username: user?.username,
-                email: order.email,
-                tradeNo: tradeNo
-            });
+                    await notifyAdminPaymentSuccess({
+                        orderId: orderId,
+                        productName: product?.name || 'Unknown Product',
+                        amount: order.amount,
+                        username: user?.username,
+                        email: order.email,
+                        tradeNo: tradeNo
+                    });
+                } catch (err) {
+                    console.error('[Notification] No-stock notify failed:', err);
+                }
+            })
         }
         await refreshAggregates();
         return { success: true, status: 'processed' };

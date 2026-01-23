@@ -2,8 +2,7 @@ import { db } from "@/lib/db"
 import { adminMessages, userMessages } from "@/lib/db/schema"
 import { desc } from "drizzle-orm"
 import { AdminMessagesContent } from "@/components/admin/messages-content"
-
-export const dynamic = 'force-dynamic'
+import { unstable_noStore } from "next/cache"
 
 function isMissingTable(error: any) {
   const errorString = JSON.stringify(error)
@@ -16,6 +15,7 @@ function isMissingTable(error: any) {
 }
 
 export default async function AdminMessagesPage() {
+  unstable_noStore()
   let rows: any[] = []
   let inbox: any[] = []
   try {

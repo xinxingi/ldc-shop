@@ -1,7 +1,7 @@
 'use server'
 
 import { auth } from "@/lib/auth"
-import { updateLoginUserEmail } from "@/lib/db/queries"
+import { updateLoginUserEmail, updateLoginUserDesktopNotificationsEnabled } from "@/lib/db/queries"
 
 function isValidEmail(value: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
@@ -21,4 +21,18 @@ export async function updateProfileEmail(emailInput: string) {
 
     await updateLoginUserEmail(userId, email || null)
     return { success: true }
+}
+
+export async function updateDesktopNotifications(enabled: boolean) {
+    const session = await auth()
+    const userId = session?.user?.id
+    if (!userId) {
+        return { success: false, error: 'common.error' }
+    }
+    try {
+        await updateLoginUserDesktopNotificationsEnabled(userId, Boolean(enabled))
+        return { success: true }
+    } catch {
+        return { success: false, error: 'common.error' }
+    }
 }

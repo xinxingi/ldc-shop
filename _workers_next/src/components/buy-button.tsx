@@ -149,15 +149,15 @@ export function BuyButton({ productId, price, productName, disabled, quantity = 
                         </div>
 
                     {emailEnabled && (
-                        <div className="space-y-2">
-                            <Label htmlFor="email">{t('buy.modal.emailLabel')}</Label>
+                        <div className="floating-field">
                             <Input
                                 id="email"
                                 type="email"
-                                placeholder={t('buy.modal.emailPlaceholder') || ''}
+                                placeholder=" "
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                             />
+                            <Label htmlFor="email" className="floating-label">{t('buy.modal.emailLabel')}</Label>
                         </div>
                     )}
 
