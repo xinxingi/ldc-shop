@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  cacheComponents: true,
+  // Cache Components are unreliable on Workers (dummy cache + setTimeout warnings)
+  cacheComponents: false,
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '**' },

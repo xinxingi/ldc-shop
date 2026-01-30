@@ -2,6 +2,7 @@
 
 import { useI18n } from "@/lib/i18n/context"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { addCards, deleteCard, deleteCards } from "@/actions/admin"
@@ -81,13 +82,17 @@ export function CardsContent({ productId, productName, unusedCards }: CardsConte
         submitLock.current = true
         setSubmitting(true)
         try {
-            await addCards(formData)
+            const result = await addCards(formData)
+            if (result && result.success === false) {
+                toast.error(t(result.error || 'common.error'))
+                return
+            }
             toast.success(t('common.success'))
             router.refresh()
             formRef.current?.reset()
             setPendingCount(0)
         } catch (e: any) {
-            toast.error(e.message)
+            toast.error(e?.message || t('common.error'))
         } finally {
             setSubmitting(false)
             submitLock.current = false
@@ -146,6 +151,20 @@ export function CardsContent({ productId, productName, unusedCards }: CardsConte
                         >
                             <input type="hidden" name="product_id" value={productId} />
                             <Textarea name="cards" placeholder={t('admin.cards.placeholder')} rows={10} className="font-mono text-sm" required disabled={submitting} />
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">{t('admin.cards.expiryLabel')}</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted-foreground">{t('admin.cards.expiryHours')}</label>
+                                        <Input name="expires_hours" type="number" min="0" step="1" disabled={submitting} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted-foreground">{t('admin.cards.expiryMinutes')}</label>
+                                        <Input name="expires_minutes" type="number" min="0" max="59" step="1" disabled={submitting} />
+                                    </div>
+                                </div>
+                                <p className="text-xs text-muted-foreground">{t('admin.cards.expiryHint')}</p>
+                            </div>
                             <Button type="submit" className="w-full" disabled={submitting}>
                                 {submitting ? t('common.processing') : t('common.add')}
                             </Button>

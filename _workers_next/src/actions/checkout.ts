@@ -3,9 +3,9 @@
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { products, cards, orders, loginUsers } from "@/lib/db/schema"
-import { cancelExpiredOrders, recalcProductAggregates, getLoginUserEmail, createUserNotification } from "@/lib/db/queries"
+import { cancelExpiredOrders, cleanupExpiredCardsIfNeeded, recalcProductAggregates, getLoginUserEmail, createUserNotification } from "@/lib/db/queries"
 import { generateOrderId, generateSign } from "@/lib/crypto"
-import { eq, sql, and, or, isNull, lt } from "drizzle-orm"
+import { eq, sql, and, or, isNull, lt, gt } from "drizzle-orm"
 import { cookies } from "next/headers"
 import { updateTag } from "next/cache"
 import { after } from "next/server"
@@ -55,6 +55,12 @@ export async function createOrder(productId: string, quantity: number = 1, email
         if (userRec?.isBlocked) {
             return { success: false, error: 'buy.userBlocked' };
         }
+    }
+
+    try {
+        await cleanupExpiredCardsIfNeeded(undefined, productId)
+    } catch {
+        // Best effort cleanup
     }
 
     try {
@@ -164,11 +170,13 @@ export async function createOrder(productId: string, quantity: number = 1, email
             // We MUST careful with shared products + zero price.
 
             // Let's grab ONE key for reference (randomly) just in case
+            const nowMs = Date.now()
             const availableCard = await db.select({ id: cards.id, cardKey: cards.cardKey })
                 .from(cards)
                 .where(and(
                     eq(cards.productId, productId),
-                    or(isNull(cards.isUsed), eq(cards.isUsed, false))
+                    or(isNull(cards.isUsed), eq(cards.isUsed, false)),
+                    or(isNull(cards.expiresAt), gt(cards.expiresAt, new Date(nowMs)))
                 ))
                 .orderBy(sql`RANDOM()`)
                 .limit(1);
@@ -203,6 +211,7 @@ export async function createOrder(productId: string, quantity: number = 1, email
                             WHERE product_id = ${productId}
                               AND (is_used = 0 OR is_used IS NULL)
                               AND reserved_at IS NULL
+                              AND (expires_at IS NULL OR expires_at > ${nowMs})
                             LIMIT 1
                         )
                         RETURNING id, card_key
@@ -220,6 +229,7 @@ export async function createOrder(productId: string, quantity: number = 1, email
 
                     // B. Fallback: Expired reservation
                     const fiveMinutesAgo = new Date(Date.now() - RESERVATION_TTL_MS);
+                    const nowMsExpired = Date.now();
                     const expiredCandidates = await db.select({
                         id: cards.id,
                         cardKey: cards.cardKey,
@@ -229,7 +239,8 @@ export async function createOrder(productId: string, quantity: number = 1, email
                         .where(and(
                             eq(cards.productId, productId),
                             or(eq(cards.isUsed, false), isNull(cards.isUsed)),
-                            lt(cards.reservedAt, fiveMinutesAgo)
+                            lt(cards.reservedAt, fiveMinutesAgo),
+                            or(isNull(cards.expiresAt), gt(cards.expiresAt, new Date(nowMsExpired)))
                         ))
                         .limit(1);
 
@@ -353,6 +364,26 @@ export async function createOrder(productId: string, quantity: number = 1, email
                 });
                 orderInserted = true
 
+                if (user?.id) {
+                    try {
+                        await createUserNotification({
+                            userId: user.id,
+                            type: 'order_delivered',
+                            titleKey: 'profile.notifications.orderDeliveredTitle',
+                            contentKey: 'profile.notifications.orderDeliveredBody',
+                            data: {
+                                params: {
+                                    orderId,
+                                    productName: product.name
+                                },
+                                href: `/order/${orderId}`
+                            }
+                        })
+                    } catch {
+                        // best effort
+                    }
+                }
+
                 after(async () => {
                     // Notify admin for points-only payment
                     console.log('[Checkout] Points payment completed, sending notification for order:', orderId);
@@ -379,22 +410,6 @@ export async function createOrder(productId: string, quantity: number = 1, email
                             productName: product.name,
                             cardKeys: joinedKeys
                         }).catch(err => console.error('[Email] Points payment email failed:', err));
-                    }
-
-                    if (user?.id) {
-                        await createUserNotification({
-                            userId: user.id,
-                            type: 'order_delivered',
-                            titleKey: 'profile.notifications.orderDeliveredTitle',
-                            contentKey: 'profile.notifications.orderDeliveredBody',
-                            data: {
-                                params: {
-                                    orderId,
-                                    productName: product.name
-                                },
-                                href: `/order/${orderId}`
-                            }
-                        })
                     }
                 })
 

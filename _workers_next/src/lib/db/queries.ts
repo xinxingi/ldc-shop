@@ -1,15 +1,15 @@
 import { db } from "./index";
 import { products, cards, orders, settings, reviews, loginUsers, categories, userNotifications, wishlistItems, wishlistVotes } from "./schema";
 import { INFINITE_STOCK, RESERVATION_TTL_MS } from "@/lib/constants";
-import { eq, sql, desc, and, asc, gte, or, inArray, lte } from "drizzle-orm";
-import { revalidateTag } from "next/cache";
+import { eq, sql, desc, and, asc, gte, or, inArray, lte, lt } from "drizzle-orm";
+import { updateTag, revalidatePath } from "next/cache";
 import { cache } from "react";
 
 // Database initialization state
 let dbInitialized = false;
 let loginUsersSchemaReady = false;
 let wishlistTablesReady = false;
-const CURRENT_SCHEMA_VERSION = 13;
+const CURRENT_SCHEMA_VERSION = 14;
 
 async function ensureCardKeyDuplicatesAllowed() {
     try {
@@ -38,6 +38,7 @@ async function ensureIndexes() {
         `CREATE INDEX IF NOT EXISTS products_sold_count_idx ON products(sold_count)`,
         `CREATE INDEX IF NOT EXISTS cards_product_used_reserved_idx ON cards(product_id, is_used, reserved_at)`,
         `CREATE INDEX IF NOT EXISTS cards_reserved_order_idx ON cards(reserved_order_id)`,
+        `CREATE INDEX IF NOT EXISTS cards_expires_at_idx ON cards(expires_at)`,
         `CREATE INDEX IF NOT EXISTS orders_status_paid_at_idx ON orders(status, paid_at)`,
         `CREATE INDEX IF NOT EXISTS orders_status_created_at_idx ON orders(status, created_at)`,
         `CREATE INDEX IF NOT EXISTS orders_user_status_created_at_idx ON orders(user_id, status, created_at)`,
@@ -108,6 +109,7 @@ async function ensureDatabaseInitialized() {
         // IMPORTANT: Even if table exists, ensure columns exist!
         await ensureProductsColumns();
         await ensureOrdersColumns();
+        await ensureCardsColumns();
         await ensureCardKeyDuplicatesAllowed();
         await ensureLoginUsersTable();
         await ensureLoginUsersColumns(); // Add this call
@@ -165,6 +167,7 @@ async function ensureDatabaseInitialized() {
             is_used INTEGER DEFAULT 0,
             reserved_order_id TEXT,
             reserved_at INTEGER,
+            expires_at INTEGER,
             used_at INTEGER,
             created_at INTEGER DEFAULT (unixepoch() * 1000)
         );
@@ -363,6 +366,12 @@ async function ensureOrdersColumns() {
     await safeAddColumn('orders', 'card_ids', 'TEXT');
 }
 
+async function ensureCardsColumns() {
+    await safeAddColumn('cards', 'reserved_order_id', 'TEXT');
+    await safeAddColumn('cards', 'reserved_at', 'INTEGER');
+    await safeAddColumn('cards', 'expires_at', 'INTEGER');
+}
+
 async function ensureLoginUsersColumns() {
     await safeAddColumn('login_users', 'last_checkin_at', 'INTEGER');
     await safeAddColumn('login_users', 'consecutive_days', 'INTEGER DEFAULT 0');
@@ -412,6 +421,7 @@ export async function recalcProductAggregates(productId: string) {
 
     try {
         await ensureProductsColumns();
+        await ensureCardsColumns();
     } catch (error: any) {
         if (isMissingTableOrColumn(error)) return;
         throw error;
@@ -423,16 +433,17 @@ export async function recalcProductAggregates(productId: string) {
     });
     if (!product) return;
 
-    const fiveMinutesAgo = Date.now() - RESERVATION_TTL_MS;
+    const nowMs = Date.now();
+    const fiveMinutesAgo = nowMs - RESERVATION_TTL_MS;
     let unusedCount = 0;
     let availableCount = 0;
     let lockedCount = 0;
 
     try {
         const cardRows = await db.select({
-            unused: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 THEN 1 ELSE 0 END), 0)`,
-            available: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.reservedAt} IS NULL OR ${cards.reservedAt} < ${fiveMinutesAgo}) THEN 1 ELSE 0 END), 0)`,
-            locked: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND ${cards.reservedAt} IS NOT NULL AND ${cards.reservedAt} >= ${fiveMinutesAgo} THEN 1 ELSE 0 END), 0)`
+            unused: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.expiresAt} IS NULL OR ${cards.expiresAt} > ${nowMs}) THEN 1 ELSE 0 END), 0)`,
+            available: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.expiresAt} IS NULL OR ${cards.expiresAt} > ${nowMs}) AND (${cards.reservedAt} IS NULL OR ${cards.reservedAt} < ${fiveMinutesAgo}) THEN 1 ELSE 0 END), 0)`,
+            locked: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.expiresAt} IS NULL OR ${cards.expiresAt} > ${nowMs}) AND ${cards.reservedAt} IS NOT NULL AND ${cards.reservedAt} >= ${fiveMinutesAgo} THEN 1 ELSE 0 END), 0)`
         })
             .from(cards)
             .where(eq(cards.productId, pid));
@@ -491,6 +502,7 @@ export async function recalcProductAggregatesForMany(productIds: string[]) {
 
     try {
         await ensureProductsColumns();
+        await ensureCardsColumns();
     } catch (error: any) {
         if (isMissingTableOrColumn(error)) return;
         throw error;
@@ -498,7 +510,8 @@ export async function recalcProductAggregatesForMany(productIds: string[]) {
 
     const QUERY_BATCH_SIZE = 50;
     const UPDATE_BATCH_SIZE = 8;
-    const fiveMinutesAgo = Date.now() - RESERVATION_TTL_MS;
+    const nowMs = Date.now();
+    const fiveMinutesAgo = nowMs - RESERVATION_TTL_MS;
 
     const aggregates = new Map<string, {
         isShared: boolean;
@@ -536,9 +549,9 @@ export async function recalcProductAggregatesForMany(productIds: string[]) {
             const batch = existingIds.slice(i, i + QUERY_BATCH_SIZE);
             const cardRows = await db.select({
                 productId: cards.productId,
-                unused: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 THEN 1 ELSE 0 END), 0)`,
-                available: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.reservedAt} IS NULL OR ${cards.reservedAt} < ${fiveMinutesAgo}) THEN 1 ELSE 0 END), 0)`,
-                locked: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND ${cards.reservedAt} IS NOT NULL AND ${cards.reservedAt} >= ${fiveMinutesAgo} THEN 1 ELSE 0 END), 0)`
+                unused: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.expiresAt} IS NULL OR ${cards.expiresAt} > ${nowMs}) THEN 1 ELSE 0 END), 0)`,
+                available: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.expiresAt} IS NULL OR ${cards.expiresAt} > ${nowMs}) AND (${cards.reservedAt} IS NULL OR ${cards.reservedAt} < ${fiveMinutesAgo}) THEN 1 ELSE 0 END), 0)`,
+                locked: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.expiresAt} IS NULL OR ${cards.expiresAt} > ${nowMs}) AND ${cards.reservedAt} IS NOT NULL AND ${cards.reservedAt} >= ${fiveMinutesAgo} THEN 1 ELSE 0 END), 0)`
             })
                 .from(cards)
                 .where(inArray(cards.productId, batch))
@@ -648,6 +661,51 @@ export async function recalcProductAggregatesForMany(productIds: string[]) {
             WHERE ${inArray(products.id, idsBatch)}
         `);
     }
+}
+
+export async function getLiveCardStats(productIds: string[]): Promise<Map<string, { unused: number; available: number; locked: number }>> {
+    const ids = Array.from(new Set((productIds || []).map((id) => String(id).trim()).filter(Boolean)));
+    const stats = new Map<string, { unused: number; available: number; locked: number }>();
+    if (!ids.length) return stats;
+
+    for (const id of ids) {
+        stats.set(id, { unused: 0, available: 0, locked: 0 });
+    }
+
+    try {
+        await ensureCardsColumns();
+    } catch (error: any) {
+        if (isMissingTableOrColumn(error)) return stats;
+        throw error;
+    }
+
+    const nowMs = Date.now();
+    const fiveMinutesAgo = nowMs - RESERVATION_TTL_MS;
+
+    try {
+        const rows = await db.select({
+            productId: cards.productId,
+            unused: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.expiresAt} IS NULL OR ${cards.expiresAt} > ${nowMs}) THEN 1 ELSE 0 END), 0)`,
+            available: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.expiresAt} IS NULL OR ${cards.expiresAt} > ${nowMs}) AND (${cards.reservedAt} IS NULL OR ${cards.reservedAt} < ${fiveMinutesAgo}) THEN 1 ELSE 0 END), 0)`,
+            locked: sql<number>`COALESCE(SUM(CASE WHEN COALESCE(${cards.isUsed}, 0) = 0 AND (${cards.expiresAt} IS NULL OR ${cards.expiresAt} > ${nowMs}) AND ${cards.reservedAt} IS NOT NULL AND ${cards.reservedAt} >= ${fiveMinutesAgo} THEN 1 ELSE 0 END), 0)`
+        })
+            .from(cards)
+            .where(inArray(cards.productId, ids))
+            .groupBy(cards.productId);
+
+        for (const row of rows) {
+            if (!row.productId) continue;
+            stats.set(row.productId, {
+                unused: Number(row.unused || 0),
+                available: Number(row.available || 0),
+                locked: Number(row.locked || 0),
+            });
+        }
+    } catch (error: any) {
+        if (!isMissingTableOrColumn(error)) throw error;
+    }
+
+    return stats;
 }
 
 async function backfillProductAggregates() {
@@ -1206,6 +1264,7 @@ export async function searchActiveProducts(params: {
             image: products.image,
             category: products.category,
             isHot: products.isHot,
+            isShared: products.isShared,
             purchaseLimit: products.purchaseLimit,
             stock: sql<number>`COALESCE(${products.stockCount}, 0)`,
             locked: sql<number>`COALESCE(${products.lockedCount}, 0)`,
@@ -1619,7 +1678,7 @@ export async function recordLoginUser(userId: string, username?: string | null, 
         });
         if ((result as any)?.meta?.changes === 1) {
             try {
-                revalidateTag('home:visitors', 'max');
+                updateTag('home:visitors');
             } catch {
                 // best effort
             }
@@ -1646,7 +1705,7 @@ export async function recordLoginUser(userId: string, username?: string | null, 
             });
             if ((result as any)?.meta?.changes === 1) {
                 try {
-                    revalidateTag('home:visitors', 'max');
+                    updateTag('home:visitors');
                 } catch {
                     // best effort
                 }
@@ -1719,6 +1778,81 @@ export async function updateLoginUserDesktopNotificationsEnabled(userId: string,
     }
 }
 
+export async function cleanupExpiredCardsIfNeeded(throttleMs: number = 10 * 60 * 1000, productId?: string) {
+    const now = Date.now();
+    try {
+        await ensureCardsColumns();
+    } catch (error: any) {
+        if (!isMissingTableOrColumn(error)) throw error;
+        return false;
+    }
+
+    if (productId) {
+        try {
+            const hasExpired = await db.select({ id: cards.id })
+                .from(cards)
+                .where(and(
+                    eq(cards.productId, productId),
+                    sql`${cards.expiresAt} IS NOT NULL AND ${cards.expiresAt} < ${now}`
+                ))
+                .limit(1);
+            if (hasExpired.length > 0) {
+                throttleMs = 0;
+            }
+        } catch (error: any) {
+            if (!isMissingTableOrColumn(error)) throw error;
+        }
+    }
+
+    let lastRun = 0;
+    try {
+        const last = await getSetting('cards_expiry_cleanup_at');
+        lastRun = Number(last || 0);
+    } catch {
+        // best effort
+    }
+
+    if (now - lastRun < throttleMs) return false;
+
+    let affectedProductIds: string[] = [];
+    try {
+        const rows = await db.select({ productId: cards.productId })
+            .from(cards)
+            .where(sql`${cards.expiresAt} IS NOT NULL AND ${cards.expiresAt} < ${now}`);
+        affectedProductIds = Array.from(new Set(rows.map((r) => r.productId).filter(Boolean)));
+    } catch (error: any) {
+        if (!isMissingTableOrColumn(error)) throw error;
+    }
+
+    try {
+        await db.run(sql`DELETE FROM cards WHERE expires_at IS NOT NULL AND expires_at < ${now}`);
+    } catch (error: any) {
+        if (!isMissingTableOrColumn(error)) throw error;
+    }
+
+    if (affectedProductIds.length > 0) {
+        try {
+            await recalcProductAggregatesForMany(affectedProductIds);
+        } catch {
+            // best effort
+        }
+        try {
+            updateTag('home:products');
+            updateTag('home:product-categories');
+        } catch {
+            // best effort
+        }
+    }
+
+    try {
+        await setSetting('cards_expiry_cleanup_at', String(now));
+    } catch {
+        // best effort
+    }
+
+    return true;
+}
+
 export async function getVisitorCount(): Promise<number> {
     try {
         await backfillLoginUsersFromOrdersAndReviews();
@@ -1745,18 +1879,19 @@ export async function cancelExpiredOrders(filters: { productId?: string; userId?
     try {
         // No transaction - D1 doesn't support SQL transactions
         const fiveMinutesAgoMs = Date.now() - RESERVATION_TTL_MS;
-        const expired: any = await db.run(sql`
-            UPDATE orders
-            SET status = 'cancelled'
-            WHERE status = 'pending'
-              AND created_at < ${fiveMinutesAgoMs}
-              AND (${productId} IS NULL OR product_id = ${productId})
-              AND (${userId} IS NULL OR user_id = ${userId})
-              AND (${orderId} IS NULL OR order_id = ${orderId})
-            RETURNING order_id
-        `);
+        // Preselect expired orders because D1 may not return rows for UPDATE ... RETURNING
+        const candidates = await db
+            .select({ orderId: orders.orderId, productId: orders.productId })
+            .from(orders)
+            .where(and(
+                eq(orders.status, 'pending'),
+                lt(orders.createdAt, new Date(fiveMinutesAgoMs)),
+                productId ? eq(orders.productId, productId) : sql`1=1`,
+                userId ? eq(orders.userId, userId) : sql`1=1`,
+                orderId ? eq(orders.orderId, orderId) : sql`1=1`
+            ));
 
-        const orderIds = (expired.results || []).map((row: any) => row.order_id as string).filter(Boolean);
+        const orderIds = candidates.map((row) => row.orderId).filter(Boolean);
         if (!orderIds.length) return orderIds;
 
         try {
@@ -1766,28 +1901,44 @@ export async function cancelExpiredOrders(filters: { productId?: string; userId?
             await db.run(sql.raw(`ALTER TABLE cards ADD COLUMN reserved_at INTEGER`));
         } catch { /* duplicate column */ }
 
-        for (const expiredOrderId of orderIds) {
+        for (const expired of candidates) {
+            const expiredOrderId = expired.orderId;
+            if (!expiredOrderId) continue;
             try {
-                await db.run(sql`
-                    UPDATE cards
-                    SET reserved_order_id = NULL, reserved_at = NULL
-                    WHERE reserved_order_id = ${expiredOrderId} AND COALESCE(is_used, false) = false
-                `);
+                // Mirror manual cancel behavior to guarantee release
+                await db.update(cards)
+                    .set({ reservedOrderId: null, reservedAt: null })
+                    .where(eq(cards.reservedOrderId, expiredOrderId));
             } catch (error: any) {
                 if (!isMissingTableOrColumn(error)) throw error;
             }
+            await db.update(orders)
+                .set({ status: 'cancelled' })
+                .where(eq(orders.orderId, expiredOrderId));
         }
 
+        const productIds = Array.from(new Set(candidates.map((row) => row.productId).filter(Boolean)));
+        for (const pid of productIds) {
+            try {
+                await recalcProductAggregates(pid);
+            } catch {
+                // best effort
+            }
+        }
         try {
-            const productRows = await db.select({ productId: orders.productId })
-                .from(orders)
-                .where(inArray(orders.orderId, orderIds));
-            await recalcProductAggregatesForMany(productRows.map(r => r.productId));
+            updateTag('home:products');
+            updateTag('home:product-categories');
         } catch {
             // best effort
         }
         try {
-            revalidateTag('home:products', 'max');
+            revalidatePath('/orders');
+            revalidatePath('/admin/orders');
+            for (const expired of candidates) {
+                if (expired.orderId) {
+                    revalidatePath(`/order/${expired.orderId}`);
+                }
+            }
         } catch {
             // best effort
         }

@@ -1,52 +1,10 @@
-import { getActiveProductCategories, getCategories, getActiveProducts, getVisitorCount, getUserPendingOrders, getSetting } from "@/lib/db/queries";
+import { getActiveProductCategories, getCategories, getActiveProducts, getVisitorCount, getUserPendingOrders, getSetting, getLiveCardStats } from "@/lib/db/queries";
 import { getActiveAnnouncement } from "@/actions/settings";
 import { auth } from "@/lib/auth";
 import { HomeContent } from "@/components/home-content";
-import { cacheLife, cacheTag } from "next/cache";
-
-const TAG_PRODUCTS = "home:products";
-const TAG_RATINGS = "home:ratings";
-const TAG_ANNOUNCEMENT = "home:announcement";
-const TAG_VISITORS = "home:visitors";
-const TAG_CATEGORIES = "home:categories";
-const TAG_PRODUCT_CATEGORIES = "home:product-categories";
+import { INFINITE_STOCK } from "@/lib/constants";
 
 const PAGE_SIZE = 24;
-
-const getCachedAnnouncement = async () => {
-  'use cache'
-  cacheTag(TAG_ANNOUNCEMENT)
-  cacheLife('days')
-  return getActiveAnnouncement()
-}
-
-const getCachedVisitorCount = async () => {
-  'use cache'
-  cacheTag(TAG_VISITORS)
-  cacheLife('days')
-  return getVisitorCount()
-}
-
-const getCachedCategories = async () => {
-  'use cache'
-  cacheTag(TAG_CATEGORIES)
-  cacheLife('days')
-  return getCategories()
-}
-
-const getCachedProductCategories = async (isLoggedIn: boolean, trustLevel: number | null) => {
-  'use cache'
-  cacheTag(TAG_PRODUCT_CATEGORIES, TAG_PRODUCTS)
-  cacheLife('days')
-  return getActiveProductCategories({ isLoggedIn, trustLevel })
-}
-
-const getCachedProducts = async (isLoggedIn: boolean, trustLevel: number | null) => {
-  'use cache'
-  cacheTag(TAG_PRODUCTS)
-  cacheLife('days')
-  return getActiveProducts({ isLoggedIn, trustLevel })
-}
 
 function stripMarkdown(input: string): string {
   return input
@@ -75,11 +33,11 @@ export default async function Home({
 
   // Run all independent queries in parallel for better performance
   const [products, announcement, visitorCount, categoryConfig, productCategories, wishlistEnabled] = await Promise.all([
-    getCachedProducts(isLoggedIn, trustLevel).catch(() => []),
-    getCachedAnnouncement().catch(() => null),
-    getCachedVisitorCount().catch(() => 0),
-    getCachedCategories().catch(() => []),
-    getCachedProductCategories(isLoggedIn, trustLevel).catch(() => []),
+    getActiveProducts({ isLoggedIn, trustLevel }).catch(() => []),
+    getActiveAnnouncement().catch(() => null),
+    getVisitorCount().catch(() => 0),
+    getCategories().catch(() => []),
+    getActiveProductCategories({ isLoggedIn, trustLevel }).catch(() => []),
     (async () => {
       try {
         return (await getSetting('wishlist_enabled')) === 'true'
@@ -91,6 +49,8 @@ export default async function Home({
 
 
   const total = products.length;
+
+  const liveStats = await getLiveCardStats(products.map((p: any) => p.id)).catch(() => new Map());
 
   /* REMOVED: Separate ratings fetch - using pre-computed values in product table
   const productIds = products.map((p: any) => p.id).filter(Boolean);
@@ -108,10 +68,16 @@ export default async function Home({
   */
 
   const productsWithRatings = products.map((p: any) => {
+    const stat = liveStats.get(p.id) || { unused: 0, available: 0, locked: 0 };
+    const available = p.isShared
+      ? (stat.unused > 0 ? INFINITE_STOCK : 0)
+      : stat.available;
+    const locked = stat.locked;
+    const stockTotal = available >= INFINITE_STOCK ? INFINITE_STOCK : (available + locked);
     // const rating = ratingsMap.get(p.id) || { average: 0, count: 0 };
     return {
       ...p,
-      stockCount: p.stock + (p.locked || 0),
+      stockCount: stockTotal,
       soldCount: p.sold || 0,
       descriptionPlain: stripMarkdown(p.description || ''),
       rating: Number(p.rating || 0),

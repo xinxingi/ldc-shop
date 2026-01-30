@@ -59,7 +59,7 @@ export function AdminMessagesContent({ history, inbox }: { history: any[]; inbox
                 <CardHeader>
                     <CardTitle className="text-lg">{t('admin.messages.compose')}</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                     <div className="grid gap-3 md:grid-cols-2">
                         <div className="space-y-2">
                             <Label>{t('admin.messages.targetType')}</Label>
@@ -104,18 +104,20 @@ export function AdminMessagesContent({ history, inbox }: { history: any[]; inbox
                             </div>
                         )}
                     </div>
-                    <div className="floating-field">
-                        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder=" " />
-                        <Label className="floating-label">{t('admin.messages.titleLabel')}</Label>
-                    </div>
-                    <div className="floating-field">
-                        <Textarea
-                            value={body}
-                            onChange={(e) => setBody(e.target.value)}
-                            placeholder=" "
-                            rows={5}
-                        />
-                        <Label className="floating-label">{t('admin.messages.bodyLabel')}</Label>
+                    <div className="space-y-6">
+                        <div className="floating-field">
+                            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder=" " />
+                            <Label className="floating-label">{t('admin.messages.titleLabel')}</Label>
+                        </div>
+                        <div className="floating-field">
+                            <Textarea
+                                value={body}
+                                onChange={(e) => setBody(e.target.value)}
+                                placeholder=" "
+                                rows={5}
+                            />
+                            <Label className="floating-label">{t('admin.messages.bodyLabel')}</Label>
+                        </div>
                     </div>
                     <div className="flex justify-end">
                         <Button

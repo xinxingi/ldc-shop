@@ -6,8 +6,9 @@ import { products, cards, reviews, categories } from "@/lib/db/schema"
 import { eq, sql, inArray, and, or, isNull, lte } from "drizzle-orm"
 import { sendTelegramMessage } from "@/lib/notifications"
 import { revalidatePath, updateTag } from "next/cache"
-import { setSetting, getSetting, recalcProductAggregates, recalcProductAggregatesForMany } from "@/lib/db/queries"
+import { setSetting, getSetting, recalcProductAggregates, recalcProductAggregatesForMany, getProductForAdmin } from "@/lib/db/queries"
 import { isAdminUsername } from "@/lib/admin-auth"
+import { unstable_noStore } from "next/cache"
 
 export async function checkAdmin() {
     const session = await auth()
@@ -144,6 +145,12 @@ export async function saveProduct(formData: FormData) {
     updateTag('home:product-categories')
 }
 
+export async function getProductForAdminAction(id: string) {
+    await checkAdmin()
+    unstable_noStore()
+    return getProductForAdmin(id)
+}
+
 export async function deleteProduct(id: string) {
     await checkAdmin()
     await db.delete(products).where(eq(products.id, id))
@@ -181,13 +188,34 @@ export async function addCards(formData: FormData) {
 
     const productId = formData.get('product_id') as string
     const rawCards = formData.get('cards') as string
+    const hoursRaw = String(formData.get('expires_hours') || '').trim()
+    const minutesRaw = String(formData.get('expires_minutes') || '').trim()
+    const hasStructured = hoursRaw !== '' || minutesRaw !== ''
+
+    let expiresInMs: number | null = null
+
+    if (hasStructured) {
+        const hours = hoursRaw === '' ? 0 : Number(hoursRaw)
+        const minutes = minutesRaw === '' ? 0 : Number(minutesRaw)
+        const validInts = Number.isInteger(hours) && Number.isInteger(minutes)
+        if (!validInts || hours < 0 || minutes < 0 || minutes > 59) {
+            return { success: false, error: "admin.cards.expiryInvalid" }
+        }
+        const totalMinutes = hours * 60 + minutes
+        if (totalMinutes <= 0) {
+            return { success: false, error: "admin.cards.expiryInvalid" }
+        }
+        expiresInMs = totalMinutes * 60 * 1000
+    }
+
+    const expiresAt = expiresInMs ? new Date(Date.now() + expiresInMs) : null
 
     const cardList = rawCards
         .split(/[\n,]+/)
         .map(c => c.trim())
         .filter(c => c)
 
-    if (cardList.length === 0) return
+    if (cardList.length === 0) return { success: true }
 
     // D1 has a limit on SQL variables (around 100 bindings per query)
     // Drizzle generates bindings for all columns (~8), so 100/8 ≈ 12 max
@@ -197,7 +225,8 @@ export async function addCards(formData: FormData) {
         await db.insert(cards).values(
             batch.map(key => ({
                 productId,
-                cardKey: key
+                cardKey: key,
+                expiresAt
             }))
         )
     }
@@ -213,6 +242,8 @@ export async function addCards(formData: FormData) {
     revalidatePath('/')
     updateTag('home:products')
     updateTag('home:product-categories')
+
+    return { success: true }
 }
 
 export async function deleteCard(cardId: number) {

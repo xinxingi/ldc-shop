@@ -20,7 +20,7 @@ async function executeStatement(statement: string) {
 async function repairTimestamps() {
     const timestampColumns = [
         { table: 'products', cols: ['created_at'] },
-        { table: 'cards', cols: ['created_at', 'reserved_at', 'used_at'] },
+        { table: 'cards', cols: ['created_at', 'reserved_at', 'expires_at', 'used_at'] },
         { table: 'orders', cols: ['created_at', 'paid_at', 'delivered_at'] },
         { table: 'login_users', cols: ['created_at', 'last_login_at'] },
         { table: 'daily_checkins_v2', cols: ['created_at'] },
@@ -97,6 +97,7 @@ export async function importData(formData: FormData) {
             isUsed: 'is_used',
             reservedOrderId: 'reserved_order_id',
             reservedAt: 'reserved_at',
+            expiresAt: 'expires_at',
             usedAt: 'used_at',
             // Orders
             orderId: 'order_id',

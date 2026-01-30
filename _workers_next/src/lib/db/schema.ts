@@ -32,6 +32,7 @@ export const cards = sqliteTable('cards', {
     isUsed: integer('is_used', { mode: 'boolean' }).default(false),
     reservedOrderId: text('reserved_order_id'),
     reservedAt: integer('reserved_at', { mode: 'timestamp_ms' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
     usedAt: integer('used_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()),
 });
