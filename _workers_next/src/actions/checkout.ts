@@ -63,18 +63,6 @@ export async function createOrder(productId: string, quantity: number = 1, email
         }
     }
 
-    try {
-        await cleanupExpiredCardsIfNeeded(undefined, productId)
-    } catch {
-        // Best effort cleanup
-    }
-
-    try {
-        await cancelExpiredOrders({ productId })
-    } catch {
-        // Best effort cleanup
-    }
-
     // Points Calculation
     let pointsToUse = 0
     let finalAmount = Number(product.price) * quantity
@@ -123,7 +111,18 @@ export async function createOrder(productId: string, quantity: number = 1, email
         return result[0]?.count || 0
     }
 
+    const runStockCleanupFallback = async () => {
+        await Promise.allSettled([
+            cleanupExpiredCardsIfNeeded(0, productId),
+            cancelExpiredOrders({ productId }),
+        ])
+    }
+
     let stock = await getAvailableStock()
+    if (stock < quantity) {
+        await runStockCleanupFallback()
+        stock = await getAvailableStock()
+    }
 
     if (stock < quantity) return { success: false, error: 'buy.outOfStock' }
 

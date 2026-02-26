@@ -24,6 +24,7 @@ import { Loader2, Minus, Plus, Share2 } from "lucide-react"
 import { toast } from "sonner"
 import Image from "next/image"
 import { INFINITE_STOCK } from "@/lib/constants"
+import { getBuyPageMeta } from "@/actions/buy"
 
 interface Product {
     id: string
@@ -76,12 +77,50 @@ export function BuyContent({
     const [quantity, setQuantity] = useState(1)
     const [showWarningDialog, setShowWarningDialog] = useState(false)
     const [warningConfirmed, setWarningConfirmed] = useState(false)
+    const [reviewsState, setReviewsState] = useState<Review[]>(reviews)
+    const [averageRatingState, setAverageRatingState] = useState(averageRating)
+    const [reviewCountState, setReviewCountState] = useState(reviewCount)
+    const [canReviewState, setCanReviewState] = useState(canReview)
+    const [reviewOrderIdState, setReviewOrderIdState] = useState<string | undefined>(reviewOrderId)
+    const [emailConfiguredState, setEmailConfiguredState] = useState(emailConfigured)
+    const [metaLoading, setMetaLoading] = useState(true)
+    const [metaRefreshSeq, setMetaRefreshSeq] = useState(0)
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
             setShareUrl(window.location.href)
         }
     }, [product.id])
+
+    useEffect(() => {
+        let cancelled = false
+
+        const loadMeta = async () => {
+            setMetaLoading(true)
+            try {
+                const meta = await getBuyPageMeta(product.id)
+                if (cancelled) return
+
+                setReviewsState(meta.reviews)
+                setAverageRatingState(meta.averageRating)
+                setReviewCountState(meta.reviewCount)
+                setCanReviewState(meta.canReview)
+                setReviewOrderIdState(meta.reviewOrderId)
+                setEmailConfiguredState(meta.emailConfigured)
+            } catch {
+                // Keep initial values when lazy fetch fails.
+            } finally {
+                if (!cancelled) {
+                    setMetaLoading(false)
+                }
+            }
+        }
+
+        void loadMeta()
+        return () => {
+            cancelled = true
+        }
+    }, [product.id, metaRefreshSeq])
 
     const shareLinks = useMemo(() => {
         if (!shareUrl) return null
@@ -314,7 +353,7 @@ export function BuyContent({
                                                     productName={product.name}
                                                     quantity={quantity}
                                                     autoOpen={warningConfirmed && !!product.purchaseWarning}
-                                                    emailConfigured={emailConfigured}
+                                                    emailConfigured={emailConfiguredState}
                                                 />
                                             )}
                                         </div>
@@ -422,11 +461,11 @@ export function BuyContent({
                         <div className="flex items-center justify-between">
                             <CardTitle className="flex items-center gap-3">
                                 {t('review.title')}
-                                {reviewCount > 0 && (
+                                {reviewCountState > 0 && (
                                     <div className="flex items-center gap-2">
-                                        <StarRating rating={Math.round(averageRating)} size="sm" />
+                                        <StarRating rating={Math.round(averageRatingState)} size="sm" />
                                         <span className="text-sm font-normal text-muted-foreground">
-                                            ({averageRating.toFixed(1)})
+                                            ({averageRatingState.toFixed(1)})
                                         </span>
                                     </div>
                                 )}
@@ -434,17 +473,28 @@ export function BuyContent({
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        {canReview && reviewOrderId && (
+                        {canReviewState && reviewOrderIdState && (
                             <div className="p-4 border rounded-lg bg-muted/20">
                                 <h3 className="text-sm font-medium mb-3">{t('review.leaveReview')}</h3>
-                                <ReviewForm productId={product.id} orderId={reviewOrderId} />
+                                <ReviewForm
+                                    productId={product.id}
+                                    orderId={reviewOrderIdState}
+                                    onSuccess={() => setMetaRefreshSeq((prev) => prev + 1)}
+                                />
                             </div>
                         )}
-                        <ReviewList
-                            reviews={reviews}
-                            averageRating={averageRating}
-                            totalCount={reviewCount}
-                        />
+                        {metaLoading ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>{t('common.loading')}</span>
+                            </div>
+                        ) : (
+                            <ReviewList
+                                reviews={reviewsState}
+                                averageRating={averageRatingState}
+                                totalCount={reviewCountState}
+                            />
+                        )}
                     </CardContent>
                 </Card>
             </div>

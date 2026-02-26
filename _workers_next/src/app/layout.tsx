@@ -8,6 +8,8 @@ import { Providers } from "@/components/providers";
 import { cn } from "@/lib/utils";
 import { getSetting } from "@/lib/db/queries";
 import { Suspense } from "react";
+import { detectServerLocale } from "@/lib/i18n/server";
+import type { Locale } from "@/lib/i18n/shared";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -91,10 +93,17 @@ async function RootLayoutContent({
   children: React.ReactNode;
 }>) {
   let themeColor: string | null = null;
+  let initialLocale: Locale = "en";
   try {
-    themeColor = await getSetting("theme_color");
+    const [resolvedThemeColor, resolvedLocale] = await Promise.all([
+      getSetting("theme_color"),
+      detectServerLocale(),
+    ]);
+    themeColor = resolvedThemeColor;
+    initialLocale = resolvedLocale;
   } catch {
     themeColor = null;
+    initialLocale = "en";
   }
   const themeHue = THEME_HUES[themeColor || "purple"] || 270;
   const themeChroma = THEME_CHROMA[themeColor || "purple"] ?? 1;
@@ -103,7 +112,7 @@ async function RootLayoutContent({
 
   return (
     <html
-      lang="en"
+      lang={initialLocale === "zh" ? "zh-CN" : "en"}
       suppressHydrationWarning
       style={{
         ["--theme-hue" as any]: themeHue,
@@ -121,7 +130,7 @@ async function RootLayoutContent({
         />
       </head>
       <body className={cn("min-h-screen bg-background font-sans antialiased", inter.className)}>
-        <Providers themeColor={themeColor}>
+        <Providers themeColor={themeColor} initialLocale={initialLocale}>
           <div className="relative flex min-h-screen flex-col">
             <SiteHeader />
             <div className="flex-1 pb-16 md:pb-0">{children}</div>

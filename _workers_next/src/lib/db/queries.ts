@@ -1,7 +1,7 @@
 import { db } from "./index";
 import { products, cards, orders, settings, reviews, loginUsers, categories, userNotifications, wishlistItems, wishlistVotes } from "./schema";
 import { INFINITE_STOCK, RESERVATION_TTL_MS } from "@/lib/constants";
-import { eq, sql, desc, and, asc, gte, or, inArray, lte, lt } from "drizzle-orm";
+import { eq, sql, desc, and, asc, gte, or, inArray, lte, lt, isNull } from "drizzle-orm";
 import { updateTag, revalidatePath } from "next/cache";
 import { cache } from "react";
 
@@ -10,6 +10,32 @@ let dbInitialized = false;
 let loginUsersSchemaReady = false;
 let wishlistTablesReady = false;
 const CURRENT_SCHEMA_VERSION = 14;
+type ColumnEnsureKey = 'products' | 'orders' | 'cards' | 'loginUsers';
+const columnEnsureState: Record<ColumnEnsureKey, { ready: boolean; pending: Promise<void> | null }> = {
+    products: { ready: false, pending: null },
+    orders: { ready: false, pending: null },
+    cards: { ready: false, pending: null },
+    loginUsers: { ready: false, pending: null },
+};
+
+async function ensureColumnsOnce(key: ColumnEnsureKey, task: () => Promise<void>) {
+    const state = columnEnsureState[key];
+    if (state.ready) return;
+    if (state.pending) {
+        await state.pending;
+        return;
+    }
+    const pending = (async () => {
+        await task();
+        state.ready = true;
+    })();
+    state.pending = pending;
+    try {
+        await pending;
+    } finally {
+        state.pending = null;
+    }
+}
 
 async function ensureCardKeyDuplicatesAllowed() {
     try {
@@ -347,35 +373,43 @@ async function ensureDatabaseInitialized() {
 }
 
 async function ensureProductsColumns() {
-    await safeAddColumn('products', 'compare_at_price', 'TEXT');
-    await safeAddColumn('products', 'is_hot', 'INTEGER DEFAULT 0');
-    await safeAddColumn('products', 'purchase_warning', 'TEXT');
-    await safeAddColumn('products', 'is_shared', 'INTEGER DEFAULT 0');
-    await safeAddColumn('products', 'visibility_level', 'INTEGER DEFAULT -1');
-    await safeAddColumn('products', 'stock_count', 'INTEGER DEFAULT 0');
-    await safeAddColumn('products', 'locked_count', 'INTEGER DEFAULT 0');
-    await safeAddColumn('products', 'sold_count', 'INTEGER DEFAULT 0');
-    await safeAddColumn('products', 'rating', 'REAL DEFAULT 0');
-    await safeAddColumn('products', 'review_count', 'INTEGER DEFAULT 0');
+    await ensureColumnsOnce('products', async () => {
+        await safeAddColumn('products', 'compare_at_price', 'TEXT');
+        await safeAddColumn('products', 'is_hot', 'INTEGER DEFAULT 0');
+        await safeAddColumn('products', 'purchase_warning', 'TEXT');
+        await safeAddColumn('products', 'is_shared', 'INTEGER DEFAULT 0');
+        await safeAddColumn('products', 'visibility_level', 'INTEGER DEFAULT -1');
+        await safeAddColumn('products', 'stock_count', 'INTEGER DEFAULT 0');
+        await safeAddColumn('products', 'locked_count', 'INTEGER DEFAULT 0');
+        await safeAddColumn('products', 'sold_count', 'INTEGER DEFAULT 0');
+        await safeAddColumn('products', 'rating', 'REAL DEFAULT 0');
+        await safeAddColumn('products', 'review_count', 'INTEGER DEFAULT 0');
+    });
 }
 
 async function ensureOrdersColumns() {
-    await safeAddColumn('orders', 'points_used', 'INTEGER DEFAULT 0 NOT NULL');
-    await safeAddColumn('orders', 'current_payment_id', 'TEXT');
-    await safeAddColumn('orders', 'payee', 'TEXT');
-    await safeAddColumn('orders', 'card_ids', 'TEXT');
+    await ensureColumnsOnce('orders', async () => {
+        await safeAddColumn('orders', 'points_used', 'INTEGER DEFAULT 0 NOT NULL');
+        await safeAddColumn('orders', 'current_payment_id', 'TEXT');
+        await safeAddColumn('orders', 'payee', 'TEXT');
+        await safeAddColumn('orders', 'card_ids', 'TEXT');
+    });
 }
 
 async function ensureCardsColumns() {
-    await safeAddColumn('cards', 'reserved_order_id', 'TEXT');
-    await safeAddColumn('cards', 'reserved_at', 'INTEGER');
-    await safeAddColumn('cards', 'expires_at', 'INTEGER');
+    await ensureColumnsOnce('cards', async () => {
+        await safeAddColumn('cards', 'reserved_order_id', 'TEXT');
+        await safeAddColumn('cards', 'reserved_at', 'INTEGER');
+        await safeAddColumn('cards', 'expires_at', 'INTEGER');
+    });
 }
 
 async function ensureLoginUsersColumns() {
-    await safeAddColumn('login_users', 'last_checkin_at', 'INTEGER');
-    await safeAddColumn('login_users', 'consecutive_days', 'INTEGER DEFAULT 0');
-    await safeAddColumn('login_users', 'desktop_notifications_enabled', 'INTEGER DEFAULT 0');
+    await ensureColumnsOnce('loginUsers', async () => {
+        await safeAddColumn('login_users', 'last_checkin_at', 'INTEGER');
+        await safeAddColumn('login_users', 'consecutive_days', 'INTEGER DEFAULT 0');
+        await safeAddColumn('login_users', 'desktop_notifications_enabled', 'INTEGER DEFAULT 0');
+    });
 }
 
 export async function ensureLoginUsersSchema() {
@@ -1381,48 +1415,48 @@ export async function createReview(data: {
 
 export async function canUserReview(userId: string, productId: string, username?: string): Promise<{ canReview: boolean; orderId?: string }> {
     try {
-        // Check by userId first
-        let deliveredOrders = await db.select({ orderId: orders.orderId })
+        const findUnreviewedOrder = async (whereClause: any) => {
+            const rows = await db.select({ orderId: orders.orderId })
+                .from(orders)
+                .leftJoin(reviews, eq(reviews.orderId, orders.orderId))
+                .where(and(
+                    whereClause,
+                    eq(orders.productId, productId),
+                    eq(orders.status, 'delivered'),
+                    isNull(reviews.id)
+                ))
+                .orderBy(desc(normalizeTimestampMs(orders.createdAt)))
+                .limit(1);
+            return rows[0]?.orderId;
+        };
+
+        // Prefer userId; only fallback to username when userId has no delivered orders.
+        const byUserIdOrderId = await findUnreviewedOrder(eq(orders.userId, userId));
+        if (byUserIdOrderId) {
+            return { canReview: true, orderId: byUserIdOrderId };
+        }
+
+        const hasDeliveredByUserId = await db.select({ orderId: orders.orderId })
             .from(orders)
             .where(and(
                 eq(orders.userId, userId),
                 eq(orders.productId, productId),
                 eq(orders.status, 'delivered')
-            ));
-
-        // If no orders found by userId, try by username
-        if (deliveredOrders.length === 0 && username) {
-            deliveredOrders = await db.select({ orderId: orders.orderId })
-                .from(orders)
-                .where(and(
-                    eq(orders.username, username),
-                    eq(orders.productId, productId),
-                    eq(orders.status, 'delivered')
-                ));
-        }
-
-        if (deliveredOrders.length === 0) {
+            ))
+            .limit(1);
+        if (hasDeliveredByUserId.length > 0) {
             return { canReview: false };
         }
 
-        // Find the first order that hasn't been reviewed yet
-        for (const order of deliveredOrders) {
-            try {
-                const existingReview = await db.select({ id: reviews.id })
-                    .from(reviews)
-                    .where(eq(reviews.orderId, order.orderId));
-
-                if (existingReview.length === 0) {
-                    // This order hasn't been reviewed yet
-                    return { canReview: true, orderId: order.orderId };
-                }
-            } catch {
-                // Reviews table might not exist, so user can review
-                return { canReview: true, orderId: order.orderId };
-            }
+        if (!username) {
+            return { canReview: false };
         }
 
-        // All orders have been reviewed
+        const byUsernameOrderId = await findUnreviewedOrder(eq(orders.username, username));
+        if (byUsernameOrderId) {
+            return { canReview: true, orderId: byUsernameOrderId };
+        }
+
         return { canReview: false };
     } catch (error) {
         console.error('canUserReview error:', error);
@@ -1871,7 +1905,10 @@ export async function cancelExpiredOrders(filters: { productId?: string; userId?
     const orderId = filters.orderId ?? null;
 
     try {
-        await ensureOrdersColumns()
+        await Promise.all([
+            ensureOrdersColumns(),
+            ensureCardsColumns(),
+        ])
     } catch (error: any) {
         if (!isMissingTableOrColumn(error)) throw error
     }
@@ -1893,13 +1930,6 @@ export async function cancelExpiredOrders(filters: { productId?: string; userId?
 
         const orderIds = candidates.map((row) => row.orderId).filter(Boolean);
         if (!orderIds.length) return orderIds;
-
-        try {
-            await db.run(sql.raw(`ALTER TABLE cards ADD COLUMN reserved_order_id TEXT`));
-        } catch { /* duplicate column */ }
-        try {
-            await db.run(sql.raw(`ALTER TABLE cards ADD COLUMN reserved_at INTEGER`));
-        } catch { /* duplicate column */ }
 
         for (const expired of candidates) {
             const expiredOrderId = expired.orderId;

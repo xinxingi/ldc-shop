@@ -2,7 +2,7 @@ import { db } from "@/lib/db"
 import { orders } from "@/lib/db/schema"
 import { and, desc, eq, or, sql } from "drizzle-orm"
 import { AdminOrdersContent } from "@/components/admin/orders-content"
-import { cancelExpiredOrders, normalizeTimestampMs, withOrderColumnFallback } from "@/lib/db/queries"
+import { normalizeTimestampMs, withOrderColumnFallback } from "@/lib/db/queries"
 import { PAYMENT_PRODUCT_ID } from "@/lib/payment"
 import { unstable_noStore } from "next/cache"
 
@@ -21,11 +21,6 @@ export default async function AdminOrdersPage(props: {
 }) {
     unstable_noStore()
     const searchParams = await props.searchParams
-    try {
-        await cancelExpiredOrders()
-    } catch {
-        // Best effort cleanup
-    }
 
     const q = (firstParam(searchParams.q) || '').trim()
     const status = (firstParam(searchParams.status) || 'all').trim()

@@ -1,8 +1,8 @@
 import { cookies, headers } from "next/headers"
 import en from '@/locales/en.json'
 import zh from '@/locales/zh.json'
+import { detectLocaleFromAcceptLanguage, isLocale, type Locale } from "./shared"
 
-type Locale = 'en' | 'zh'
 type Translations = typeof en
 
 const translations: Record<Locale, Translations> = { en, zh }
@@ -18,19 +18,17 @@ function interpolate(text: string, params?: Record<string, string | number>): st
   }, text)
 }
 
-async function detectLocale(): Promise<Locale> {
+export async function detectServerLocale(): Promise<Locale> {
   const cookieStore = await cookies()
-  const cookieLocale = cookieStore.get('ldc-locale')?.value as Locale | undefined
-  if (cookieLocale && translations[cookieLocale]) return cookieLocale
+  const cookieLocale = cookieStore.get('ldc-locale')?.value
+  if (isLocale(cookieLocale)) return cookieLocale
 
   const headerList = await headers()
-  const acceptLang = headerList.get('accept-language') || ''
-  if (acceptLang.toLowerCase().includes('zh')) return 'zh'
-  return 'en'
+  return detectLocaleFromAcceptLanguage(headerList.get('accept-language'))
 }
 
 export async function getServerI18n() {
-  const locale = await detectLocale()
+  const locale = await detectServerLocale()
   const t = (key: string, params?: Record<string, string | number>): string => {
     const text = getNestedValue(translations[locale], key)
     return interpolate(text, params)

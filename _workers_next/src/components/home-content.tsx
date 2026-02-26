@@ -255,6 +255,7 @@ export function HomeContent({ products, announcement, visitorCount, categories =
                             >
                                 <Link
                                     href={`/buy/${product.id}`}
+                                    prefetch={false}
                                     aria-label={t('common.viewDetails')}
                                     className="absolute inset-0 z-10"
                                 />
@@ -329,18 +330,14 @@ export function HomeContent({ products, announcement, visitorCount, categories =
                                         </div>
                                     </div>
 
-                                    <Link href={`/buy/${product.id}`} className="ml-auto relative z-30 pointer-events-auto">
-                                        <Button
-                                            size="sm"
-                                            className={cn(
-                                                "h-9 px-5 text-xs font-semibold rounded-full backdrop-blur-sm shadow-sm hover:shadow-lg hover:scale-105 transition-all duration-300 active:scale-95 cursor-pointer",
-                                                product.stockCount > 0 ? "bg-primary/90 text-primary-foreground hover:bg-primary" : "bg-muted/80 text-muted-foreground hover:bg-muted"
-                                            )}
-                                            disabled={product.stockCount <= 0}
-                                        >
-                                            {product.stockCount > 0 ? t('common.buy') : t('common.outOfStock')}
-                                        </Button>
-                                    </Link>
+                                    <span
+                                        className={cn(
+                                            "ml-auto inline-flex h-9 items-center rounded-full px-5 text-xs font-semibold backdrop-blur-sm shadow-sm transition-all duration-300",
+                                            product.stockCount > 0 ? "bg-primary/90 text-primary-foreground" : "bg-muted/80 text-muted-foreground"
+                                        )}
+                                    >
+                                        {product.stockCount > 0 ? t('common.buy') : t('common.outOfStock')}
+                                    </span>
                                 </CardFooter>
                             </Card>
                         ))}
