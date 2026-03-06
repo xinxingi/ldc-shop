@@ -158,9 +158,104 @@ Go to [credit.linux.do](https://credit.linux.do) to create/configure:
 
 Get **Client ID** and **Client Secret**, and fill them into environment variables as `MERCHANT_ID` and `MERCHANT_KEY` (**Secret recommended**).
 
+For GitHub OAuth App, set **Authorization callback URL** to:
+`<your-full-site-url>/api/auth/callback/github`
+
+Example:
+`https://shop.chatgpt.org.uk/api/auth/callback/github`
+
+It must exactly match the protocol and domain of `NEXT_PUBLIC_APP_URL` (no extra trailing slash).
+
+GitHub OAuth App creation steps:
+
+1. Open [GitHub Developer Settings](https://github.com/settings/developers).
+2. Go to **OAuth Apps** and click **New OAuth App**.
+3. Fill in:
+   - **Application name**: any name (for example `LDC Shop`)
+   - **Homepage URL**: your full site URL (must match `NEXT_PUBLIC_APP_URL`)
+   - **Authorization callback URL**: `<your-full-site-url>/api/auth/callback/github`
+4. Click **Register application**.
+5. Copy **Client ID**, then click **Generate a new client secret** to get **Client Secret**.
+6. Set Worker environment variables:
+   - `GITHUB_ID` = Client ID
+   - `GITHUB_SECRET` = Client Secret (recommended as Secret)
+
 ### 3. Other Variables
-*   **ADMIN_USERS**: Admin usernames, comma separated (e.g., `chatgpt,admin`) (**Secret recommended**).
+*   **ADMIN_USERS**: Admin usernames, comma separated (supports Linux DO usernames and GitHub usernames in `gh_GitHub用户名` format, e.g., `chatgpt,gh_octocat`) (**Secret recommended**).
 *   **NEXT_PUBLIC_APP_URL**: Your full app URL (e.g., `https://store.chatgpt.org.uk`). **Must be Text, not Secret**.
+
+> Important: For a GitHub account to be recognized as admin, `ADMIN_USERS` must contain `gh_GitHub用户名` (for example `gh_octocat`). Using just `octocat` will not work.
+
+## 🔌 Card Auto-Replenish API Integration
+
+You can configure Card API auto-replenish per product in the admin `Card Inventory` page.
+
+### Trigger Timing
+
+- On enable: the system immediately tries to pull 1 card key.
+- Manual pull: when clicking `Pull 1 Card`, it pulls 1 card key.
+- Auto-replenish: after each successful delivery, it auto-pulls 1 card key (no cron required).
+
+### Request Rules
+
+- Method: `GET`
+- URL: uses the exact API URL you configured in admin, as-is
+- No automatic `productId` append/replace
+- Optional header:
+  - `Authorization: Bearer <token>` (sent only when token is configured)
+- Fixed header:
+  - `Accept: application/json, text/plain;q=0.9, */*;q=0.8`
+
+### Response Requirements
+
+Each request should return one deliverable card key. Supported response formats:
+
+1. Plain text (`text/plain`)
+
+```text
+ABC-DEF-123
+```
+
+2. JSON direct fields (any one of them)
+
+```json
+{ "cardKey": "ABC-DEF-123" }
+```
+
+```json
+{ "card": "ABC-DEF-123" }
+```
+
+```json
+{ "key": "ABC-DEF-123" }
+```
+
+```json
+{ "code": "ABC-DEF-123" }
+```
+
+3. JSON nested fields (recursive extraction from `data` / `result` / `item`)
+
+```json
+{ "data": { "cardKey": "ABC-DEF-123" } }
+```
+
+```json
+{ "result": { "item": { "code": "ABC-DEF-123" } } }
+```
+
+4. JSON array (the first valid card key will be used)
+
+```json
+[{ "cardKey": "ABC-DEF-123" }, { "cardKey": "XYZ-999-888" }]
+```
+
+### Recommended Status Codes
+
+- Success: return `200`
+- Failure (out of stock/auth invalid/invalid params): return `4xx/5xx`
+
+Your API should avoid returning duplicate card keys. Duplicate keys will be rejected by the store's uniqueness constraints.
 
 ## 🛠️ Local Development
 

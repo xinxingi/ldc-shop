@@ -12,6 +12,7 @@ import { after } from "next/server"
 import { notifyAdminPaymentSuccess } from "@/lib/notifications"
 import { sendOrderEmail } from "@/lib/email"
 import { INFINITE_STOCK, RESERVATION_TTL_MS } from "@/lib/constants"
+import { pullOneCardFromApi } from "@/lib/card-api"
 
 const MAX_ORDER_QUANTITY = 10000
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -19,6 +20,23 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 function isValidEmail(value: string | null | undefined) {
     if (!value) return false
     return EMAIL_REGEX.test(value.trim())
+}
+
+async function autoReplenishByApi(productId: string, reason: string) {
+    try {
+        const result = await pullOneCardFromApi(productId)
+        if (result.ok) {
+            console.log(`[Card API] Auto replenished for product ${productId}, reason=${reason}`)
+            return
+        }
+        if (result.skipped) {
+            console.info(`[Card API] Auto replenish skipped for product ${productId}, reason=${reason}, detail=${result.error || "skipped"}`)
+            return
+        }
+        console.warn(`[Card API] Auto replenish failed for product ${productId}, reason=${reason}, detail=${result.error || "unknown_error"}`)
+    } catch (error: any) {
+        console.warn(`[Card API] Auto replenish exception for product ${productId}, reason=${reason}, detail=${error?.message || "unknown_error"}`)
+    }
 }
 
 export async function createOrder(productId: string, quantity: number = 1, email?: string, usePoints: boolean = false) {
@@ -308,12 +326,13 @@ export async function createOrder(productId: string, quantity: number = 1, email
 
         const joinedKeys = reservedCards.map(c => c.key).join('\n')
 
-        await createOrderRecord(reservedCards, joinedKeys, isZeroPrice, pointsToUse, finalAmount, user, session?.user?.name, resolvedContactInfo, product, orderId, quantity)
+        await createOrderRecord(reservedCards, joinedKeys, isZeroPrice, pointsToUse, finalAmount, user, session?.user?.username, resolvedContactInfo, product, orderId, quantity)
     };
 
-    const createOrderRecord = async (reservedCards: any[], joinedKeys: string, isZeroPrice: boolean, pointsToUse: number, finalAmount: number, user: any, username: any, contactInfo: any, product: any, orderId: string, qty: number) => {
+    const createOrderRecord = async (reservedCards: any[], joinedKeys: string, isZeroPrice: boolean, pointsToUse: number, finalAmount: number, user: any, canonicalUsername: any, contactInfo: any, product: any, orderId: string, qty: number) => {
         let pointsDeducted = false
         let orderInserted = false
+        const normalizedUsername = canonicalUsername || user?.username || user?.name || null
 
         try {
             if (pointsToUse > 0) {
@@ -357,7 +376,7 @@ export async function createOrder(productId: string, quantity: number = 1, email
                     amount: finalAmount.toString(),
                     email: resolvedContactInfo,
                     userId: user?.id || null,
-                    username: username || user?.username || null,
+                    username: normalizedUsername,
                     status: 'delivered',
                     cardKey: joinedKeys,
                     cardIds: cardIdsValue,
@@ -390,6 +409,10 @@ export async function createOrder(productId: string, quantity: number = 1, email
                     }
                 }
 
+                if (!product.isShared && !!cardIdsValue) {
+                    await autoReplenishByApi(product.id, `order:${orderId}:zero_price`)
+                }
+
                 after(async () => {
                     // Notify admin for points-only payment
                     console.log('[Checkout] Points payment completed, sending notification for order:', orderId);
@@ -398,7 +421,7 @@ export async function createOrder(productId: string, quantity: number = 1, email
                             orderId,
                             productName: product.name,
                             amount: pointsToUse.toString() + ' (积分)',
-                            username: username || user?.username,
+                            username: normalizedUsername,
                             email: contactInfo || user?.email,
                             tradeNo: 'POINTS_REDEMPTION'
                         });
@@ -427,7 +450,7 @@ export async function createOrder(productId: string, quantity: number = 1, email
                     amount: finalAmount.toString(),
                     email: resolvedContactInfo,
                     userId: user?.id || null,
-                    username: username || user?.username || null,
+                    username: normalizedUsername,
                     status: 'pending',
                     pointsUsed: pointsToUse,
                     currentPaymentId: orderId, // Store current payment ID

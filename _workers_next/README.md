@@ -102,6 +102,18 @@
 
 4. 点击 **Deploy**
 
+#### 自动部署未触发？快速排查
+
+如果你已经推送了代码但 Cloudflare 没有自动开始新构建，可按下面检查：
+
+1. 确认项目类型是 **Workers Builds**（不是 Pages）。
+2. 确认 Git 仓库监听分支与实际推送分支一致（例如都为 `main`）。
+3. 确认改动发生在 **Path = `_workers_next`** 目录内（路径外改动可能不会触发此项目构建）。
+4. 确认构建命令/部署命令仍为：
+   - Build: `npm install && npx opennextjs-cloudflare build`
+   - Deploy: `npx wrangler deploy`
+5. 若以上都正确仍未触发，可在 Cloudflare Dashboard 里断开并重新连接一次 Git 仓库授权。
+
 #### 3. 绑定 D1 数据库
 
 **如果你使用了默认数据库名 `ldc-shop-next`**，数据库会自动绑定，可以跳过此步骤。
@@ -123,13 +135,16 @@
 |--------|------|------|
 | `OAUTH_CLIENT_ID` | Secret | Linux DO Connect Client ID |
 | `OAUTH_CLIENT_SECRET` | Secret | Linux DO Connect Client Secret |
+| `GITHUB_ID` | Secret | GitHub OAuth App Client ID（可选，配置后启用 GitHub 登录） |
+| `GITHUB_SECRET` | Secret | GitHub OAuth App Client Secret（可选，配置后启用 GitHub 登录） |
 | `MERCHANT_ID` | Secret | EPay 商户 ID |
 | `MERCHANT_KEY` | Secret | EPay 商户 Key |
 | `AUTH_SECRET` | Secret | 随机字符串 (可用 `openssl rand -base64 32` 生成) |
-| `ADMIN_USERS` | Secret | 管理员的 Linux DO 用户名，逗号分隔。例如: `zhangsan,lisi` |
+| `ADMIN_USERS` | Secret | 管理员用户名列表（支持 Linux DO 用户名和 GitHub 用户名 `gh_GitHub用户名`），逗号分隔。例如: `zhangsan,gh_octocat` |
 | `NEXT_PUBLIC_APP_URL` | **Text** | 你的 Workers 域名 (如 `https://ldc-shop.xxx.workers.dev`) |
 
 > ⚠️ **重要**: `NEXT_PUBLIC_APP_URL` **必须**设置为 Text 类型，不能用 Secret，否则支付签名会失败！
+> ⚠️ **重要**: 若 GitHub 用户需要管理员权限，`ADMIN_USERS` 中**必须**填写 `gh_GitHub用户名`（例如 `gh_octocat`），不能只写原始 GitHub 用户名。
 
 **回调地址配置：**
 
@@ -138,8 +153,27 @@
 | 平台 | 配置项 | 地址 |
 |------|--------|------|
 | Linux DO Connect | 回调地址 (Callback URL) | `https://ldc-shop.xxx.workers.dev/api/auth/callback/linuxdo` |
+| GitHub OAuth App | 回调地址 (Authorization callback URL) | `https://ldc-shop.xxx.workers.dev/api/auth/callback/github` |
 | EPay / Linux DO Credit | 通知 URL (Notify URL) | `https://ldc-shop.xxx.workers.dev/api/notify` |
 | EPay / Linux DO Credit | 回调 URL (Return URL) | `https://ldc-shop.xxx.workers.dev/callback` |
+
+> GitHub 的 **Authorization callback URL** 固定填写为：`<你的站点完整 URL>/api/auth/callback/github`  
+> 例如站点是 `https://shop.chatgpt.org.uk`，则填写 `https://shop.chatgpt.org.uk/api/auth/callback/github`。  
+> 注意必须与 `NEXT_PUBLIC_APP_URL` 的协议和域名完全一致，且不要额外加尾部斜杠。
+
+**GitHub OAuth App 创建步骤：**
+
+1. 打开 [GitHub Developer Settings](https://github.com/settings/developers)。
+2. 进入 **OAuth Apps**，点击 **New OAuth App**。
+3. 按以下方式填写：
+   - **Application name**: 自定义（例如 `LDC Shop`）
+   - **Homepage URL**: 你的站点完整 URL（与 `NEXT_PUBLIC_APP_URL` 一致）
+   - **Authorization callback URL**: `<你的站点完整 URL>/api/auth/callback/github`
+4. 点击 **Register application**。
+5. 在应用详情页复制 **Client ID**，并点击 **Generate a new client secret** 获取 **Client Secret**。
+6. 将二者分别填入 Workers 环境变量：
+   - `GITHUB_ID` = Client ID
+   - `GITHUB_SECRET` = Client Secret（建议使用 Secret）
 
 #### 5. 首次访问
 
@@ -149,7 +183,7 @@
 
 #### 6. 进入管理后台
 
-1. **设置管理员**: 确保在环境变量 `ADMIN_USERS` 中配置了你的 Linux DO 用户名（不区分大小写，多个用户用逗号分隔）。
+1. **设置管理员**: 在环境变量 `ADMIN_USERS` 中配置管理员用户名（不区分大小写，多个用户用逗号分隔）。支持 Linux DO 用户名，以及 GitHub 登录用户名 `gh_GitHub用户名`。
 2. **登录商城**: 使用该管理账号登录商城。
 3. **访问入口**:
     - **顶部导航**: 登录后，顶部导航栏会出现 "管理后台" 链接（桌面端）。
@@ -186,11 +220,86 @@
 |---|---|
 | `OAUTH_CLIENT_ID` | Linux DO Connect Client ID（建议 Secret） |
 | `OAUTH_CLIENT_SECRET` | Linux DO Connect Client Secret（Secret） |
+| `GITHUB_ID` | GitHub OAuth App Client ID（可选，配置后启用 GitHub 登录） |
+| `GITHUB_SECRET` | GitHub OAuth App Client Secret（可选，配置后启用 GitHub 登录） |
 | `MERCHANT_ID` | EPay 商户 ID（建议 Secret） |
 | `MERCHANT_KEY` | EPay 商户 Key（Secret） |
 | `AUTH_SECRET` | NextAuth 加密密钥（Secret） |
-| `ADMIN_USERS` | 管理员的 Linux DO 用户名 (name)，逗号分隔。例如: `zhangsan,lisi` |
+| `ADMIN_USERS` | 管理员用户名列表，支持 Linux DO 用户名和 GitHub `gh_GitHub用户名` 用户名，逗号分隔。例如: `zhangsan,gh_octocat` |
 | `NEXT_PUBLIC_APP_URL` | 部署后的完整 URL (用于回调，必须 Text) |
+
+> ⚠️ 使用 GitHub 登录时，系统用户名会自动加前缀 `gh_`；如需管理员权限，`ADMIN_USERS` 中**必须**填写这个带前缀的用户名（例如 `gh_octocat`），不能只写 `octocat`。
+
+## 🔌 卡密自动补货 API 对接
+
+在管理后台的 `卡密管理` 页面可为单个商品配置“卡密 API 自动补货”。
+
+### 触发时机
+
+- 启用时：会立即尝试拉取 1 条卡密。
+- 手动拉取：点击“手动拉取 1 条”时拉取 1 条。
+- 自动补货：订单成功发货后自动补 1 条（无需 Cron）。
+
+### 请求规则
+
+- 请求方法：`GET`
+- 请求 URL：使用你在后台填写的 API URL，**原样请求**
+- 不会自动追加/替换 `productId` 参数
+- 可选请求头：
+  - `Authorization: Bearer <token>`（仅在你配置了 Token 时发送）
+- 固定请求头：
+  - `Accept: application/json, text/plain;q=0.9, */*;q=0.8`
+
+### 响应要求
+
+接口每次请求返回 1 条可发货的卡密即可，支持以下格式：
+
+1. 纯文本（`text/plain`）
+
+```text
+ABC-DEF-123
+```
+
+2. JSON 直接字段（任一字段名）
+
+```json
+{ "cardKey": "ABC-DEF-123" }
+```
+
+```json
+{ "card": "ABC-DEF-123" }
+```
+
+```json
+{ "key": "ABC-DEF-123" }
+```
+
+```json
+{ "code": "ABC-DEF-123" }
+```
+
+3. JSON 嵌套字段（支持 `data` / `result` / `item` 递归提取）
+
+```json
+{ "data": { "cardKey": "ABC-DEF-123" } }
+```
+
+```json
+{ "result": { "item": { "code": "ABC-DEF-123" } } }
+```
+
+4. JSON 数组（会从前到后提取第一条可用卡密）
+
+```json
+[{ "cardKey": "ABC-DEF-123" }, { "cardKey": "XYZ-999-888" }]
+```
+
+### 返回码建议
+
+- 成功：返回 `200`
+- 失败（如无库存、鉴权失败、参数错误）：返回 `4xx/5xx`
+
+建议你的 API 避免重复返回同一条卡密；若返回重复卡密，系统会因去重约束而拒绝入库。
 
 ## 📄 许可证
 MIT

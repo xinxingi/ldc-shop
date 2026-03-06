@@ -7,21 +7,32 @@
 基于 **Next.js 16**、**Shadcn UI** 和 **Linux DO Connect** 构建的强大的无服务器虚拟商品商店。
 
 > [!IMPORTANT]
-> **⚠️ Vercel 版本已停止更新，请使用 Cloudflare Workers 版本！**
+> **⚠️ Vercel 版本已停止更新，请使用 Cloudflare Workers 版本或者 Docker 版！**
 > 
-> Workers 版本是当前唯一持续维护的版本，包含所有最新功能。
+> Workers 版本是当前持续维护的版本，包含所有最新功能。Docker 版可能会有更新滞后。
 
-> 🚀 **推荐部署方式：Cloudflare Workers 版本**
+> 🚀 **推荐部署方式：Cloudflare Workers 版本或者 Docker 版**
 > 
-> | 对比项 | Cloudflare Workers | Vercel |
-> |--------|-------------------|--------|
-> | 维护状态 | **✅ 持续更新** | ⚠️ 停止更新 |
-> | 免费请求 | **10 万次/天** | 有限制 |
-> | 数据库 | **D1 免费 5GB** | Postgres 有限额 |
-> | 冷启动 | **几乎无延迟** | 有冷启动 |
-> | 全球边缘 | ✅ 全球节点 | 部分地区 |
+> | 对比项 | Cloudflare Workers | Docker 自托管 | Vercel |
+> |--------|-------------------|--------------|--------|
+> | 维护状态 | **✅ 持续更新** | ✅ 同步更新 | ⚠️ 停止更新 |
+> | 免费请求 | **10 万次/天** | 无限制 | 有限制 |
+> | 数据库 | **D1 免费 5GB** | SQLite 无限制 | Postgres 有限额 |
+> | 冷启动 | **几乎无延迟** | 无冷启动 | 有冷启动 |
+> | 部署要求 | 无需服务器 | 需要 VPS | 无需服务器 |
+> | 全球边缘 | ✅ 全球节点 | 单节点 | 部分地区 |
 > 
 > 👉 **[查看 Workers 部署指南 → `_workers_next/README.md`](./_workers_next/README.md)**
+> 
+> 👉 **[查看 Docker 部署指南 → `_docker/README.md`](./_docker/README.md)**
+
+## 📢 登录状态公告（2026-03-04）
+
+`Linux DO Connect` OAuth 登录已恢复正常，当前可正常完成授权并登录。
+
+项目已保留 **GitHub 登录** 作为备用登录方式（配置方法见 `_workers_next/README.md` 中的 GitHub OAuth App 说明）。
+
+如后续登录状态有变化，将在本公告继续更新。
 
 ## ✨ 特性
 - **现代技术栈**: Next.js 16 (App Router), Tailwind CSS, TypeScript.
@@ -90,6 +101,12 @@
 免费额度更高、全球访问更快、无冷启动延迟。
 
 👉 **[查看完整部署指南 → `_workers_next/README.md`](./_workers_next/README.md)**
+
+### 备选：Docker 自托管部署
+
+适用于 VPS / 自有服务器，数据库使用本地 SQLite，无需依赖第三方云服务。
+
+👉 **[查看 Docker 部署指南 → `_docker/README.md`](./_docker/README.md)**
 
 ### 备选：Vercel 部署
 
